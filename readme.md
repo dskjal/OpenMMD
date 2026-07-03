@@ -251,3 +251,16 @@ model JSON の保存はマテリアルタブの `Model JSON を保存` からで
 - Screen Space Reflection
 - Screen Space Refraction
 - 鏡
+
+# ライセンス
+|名前|バージョン|license|
+|---:|---:|---:|
+|[Ammo.js](https://github.com/kripken/ammo.js/)|2023|Zlib|
+|Bullet|2.82|Zlib|
+|[Mediabunny](https://github.com/Vanilagy/mediabunny)|1.44.0|MPL-2.0|
+|[glMatrix](https://github.com/toji/gl-matrix)|3.4.4|MIT|
+|[JSZip](https://github.com/Stuk/jszip)|3.10.1|MIT|
+|[tga.js](https://github.com/vthibault/tga.js)|1.1.1|MIT|
+|[encoding.js](https://github.com/polygonplanet/encoding.js)|2.2.0|MIT|
+|[three.js](https://github.com/mrdoob/three.js)|0.184.0|MIT|
+|OpenMMD||MIT|
