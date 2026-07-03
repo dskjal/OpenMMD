@@ -11,6 +11,10 @@
 |Windows|11||最新の Chrome|
 |Linux|||最新の Chrome|
 
+# github pages の URL
+
+[https://dskjal.github.io/OpenMMD/](https://dskjal.github.io/OpenMMD/)
+
 # ローカルでの実行方法
 ### 必要なアプリ
 - Git
