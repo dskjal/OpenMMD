@@ -1,0 +1,73 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import test from 'node:test';
+
+test('Bloom extract uses dynamicRange as the threshold upper bound with a soft knee', async () => {
+  const shaderSource = await fs.readFile(new URL('../source/infrastructure/gpu/shaders/post-effect/bloom.wgsl', import.meta.url), 'utf-8');
+
+  assert.match(shaderSource, /dynamicRange: f32/);
+  assert.match(shaderSource, /shadowMultiplier: f32/);
+  assert.match(shaderSource, /clamp\(bloomUniformsExtract\.threshold,\s*0\.0,\s*max\(0\.0,\s*bloomUniformsExtract\.dynamicRange\)\)/);
+  assert.match(shaderSource, /let softKnee = \(soft \* soft\) \/ max\(4\.0 \* knee,\s*0\.0001\)/);
+  assert.match(shaderSource, /let shadowFactor = sample_bloom_shadow_factor_filtered\(\s*t_scene_mask_extract,\s*uv,\s*bloomUniformsExtract\.shadowMultiplier,\s*\);/);
+  assert.match(shaderSource, /let color = sample_karis_average\(t_scene, s_scene, uv, texelSize, max\(1\.0, bloomPassExtract\.radiusScale\)\) \* shadowFactor;/);
+});
+
+test('Bloom samples scene mask and modulates extract by the shadow multiplier', async () => {
+  const shaderSource = await fs.readFile(new URL('../source/infrastructure/gpu/shaders/post-effect/bloom.wgsl', import.meta.url), 'utf-8');
+
+  assert.match(shaderSource, /struct BloomOutputSize/);
+  assert.match(shaderSource, /fn bloom_uv\(pos: vec2<f32>, outputSize: vec2<f32>\) -> vec2<f32>/);
+  assert.match(shaderSource, /fn sanitize_bloom_component\(value: f32\) -> f32/);
+  assert.match(shaderSource, /fn sanitize_bloom_color\(color: vec3<f32>\) -> vec3<f32>/);
+  assert.match(shaderSource, /fn sample_bloom_color\(textureValue: texture_2d<f32>, samplerValue: sampler, uv: vec2<f32>\) -> vec3<f32>/);
+  assert.match(shaderSource, /fn sample_bloom_shadow_mask\(textureValue: texture_2d<f32>, uv: vec2<f32>\) -> vec4<f32>/);
+  assert.match(shaderSource, /let coord = clamp\(vec2<i32>\(floor\(clampedUv \* vec2<f32>\(size\)\)\), vec2<i32>\(0, 0\), maxCoord\);/);
+  assert.match(shaderSource, /fn sample_bloom_shadow_factor\(textureValue: texture_2d<f32>, uv: vec2<f32>, strength: f32\) -> f32/);
+  assert.match(shaderSource, /fn bloom_shadow_contribution\(maskSample: vec4<f32>, weight: f32\) -> vec2<f32>/);
+  assert.match(shaderSource, /fn sample_bloom_shadow_factor_filtered\(textureValue: texture_2d<f32>, uv: vec2<f32>, strength: f32\) -> f32/);
+  assert.match(shaderSource, /if \(maskSample\.a < 0\.5\) {\s*return 1\.0;\s*}/);
+  assert.match(shaderSource, /mix\(1\.0, maskFactor, clampedStrength\)/);
+  assert.match(shaderSource, /let centerWeight = 4\.0;/);
+  assert.match(shaderSource, /let crossWeight = 2\.0;/);
+  assert.match(shaderSource, /let diagonalWeight = 1\.0;/);
+  assert.match(shaderSource, /let centerContribution = bloom_shadow_contribution\(center, centerWeight\);/);
+  assert.match(shaderSource, /let leftContribution = bloom_shadow_contribution\(sampleLeft, crossWeight\);/);
+  assert.match(shaderSource, /let downRightContribution = bloom_shadow_contribution\(sampleDownRight, diagonalWeight\);/);
+  assert.match(shaderSource, /let filteredMaskFactor = select\(\s*1\.0,\s*accumulated\.x \/ max\(accumulated\.y, 0\.0001\),\s*accumulated\.y > 0\.0,\s*\);/);
+  assert.match(shaderSource, /@vertex\s*fn vs_bloom_shadow_debug\(@builtin\(vertex_index\) vertexIndex: u32\) -> FullscreenVertexOutput/);
+  assert.match(shaderSource, /fn normalize_bloom_debug_color\(color: vec3<f32>\) -> vec3<f32>/);
+  assert.match(shaderSource, /@fragment\s*fn fs_bloom_color_debug\(input: FullscreenVertexOutput\) -> @location\(0\) vec4<f32>/);
+  assert.match(shaderSource, /let tileSize = vec2<f32>\(0\.96, 0\.96\);/);
+  assert.match(shaderSource, /let margin = vec2<f32>\(0\.02, 0\.02\);/);
+  assert.match(shaderSource, /@group\(0\) @binding\(4\) var t_scene_mask_extract: texture_2d<f32>;/);
+  assert.match(shaderSource, /fn fs_bloom_shadow_debug\(input: FullscreenVertexOutput\) -> @location\(0\) vec4<f32>/);
+  assert.match(shaderSource, /let maskSample = sample_bloom_shadow_mask\(t_bloom_color_debug, uv\);/);
+  assert.match(shaderSource, /let baseColor = select\(vec3<f32>\(0\.0, 0\.0, 0\.0\), shade, maskSample\.a >= 0\.5\);/);
+  assert.match(shaderSource, /let color = mix\(baseColor, vec3<f32>\(1\.0, 0\.2, 0\.2\), border\);/);
+  assert.match(shaderSource, /return vec4<f32>\(color, 0\.95\);/);
+  assert.doesNotMatch(shaderSource, /@group\(3\) @binding\(0\) var<uniform> uniforms: EnvironmentUniforms;/);
+  assert.doesNotMatch(shaderSource, /let debugTextureSize = vec2<f32>\(textureDimensions\(t_bloom_shadow_debug\)\);/);
+  assert.doesNotMatch(shaderSource, /let uv = bloom_uv\(input\.position\.xy, debugTextureSize\);/);
+  assert.doesNotMatch(shaderSource, /return vec4<f32>\(1,1,1,1\);/);
+  assert.match(shaderSource, /return textureLoad\(textureValue, coord, 0\);/);
+  assert.doesNotMatch(shaderSource, /if \(maskSample\.a < 0\.5\) {\s*return vec4<f32>\(0\.0, 0\.0, 0\.0, 1\.0\);\s*}/);
+  assert.match(shaderSource, /@group\(0\) @binding\(0\) var t_bloom_color_debug: texture_2d<f32>;/);
+  assert.match(shaderSource, /@group\(0\) @binding\(1\) var s_bloom_color_debug: sampler;/);
+  assert.match(shaderSource, /let sourceColor = sample_bloom_color\(t_bloom_color_debug, s_bloom_color_debug, uv\);/);
+  assert.match(shaderSource, /let border = select\(0\.0, 1\.0, input\.uv\.x < 0\.01 \|\| input\.uv\.x > 0\.99 \|\| input\.uv\.y < 0\.01 \|\| input\.uv\.y > 0\.99\);/);
+  assert.match(shaderSource, /let mixedColor = mix\(color, vec3<f32>\(0\.2, 0\.8, 1\.0\), border\);/);
+  assert.doesNotMatch(shaderSource, /@group\(0\) @binding\(1\) var t_bloom_shadow_debug: texture_2d<f32>;/);
+  assert.doesNotMatch(shaderSource, /@group\(0\) @binding\(3\) var t_bloom_color_debug: texture_2d<f32>;/);
+  assert.match(shaderSource, /@group\(1\) @binding\(5\) var t_scene_mask_composite: texture_2d<f32>;/);
+  assert.match(shaderSource, /let uv = bloom_uv\(input\.position\.xy, bloomOutputSizeComposite\.size\)/);
+  assert.match(shaderSource, /let shadowFactor = sample_bloom_shadow_factor_filtered\(\s*t_scene_mask_extract,\s*uv,\s*bloomUniformsExtract\.shadowMultiplier,\s*\);/);
+  assert.match(shaderSource, /let color = sample_karis_average\(t_scene, s_scene, uv, texelSize, max\(1\.0, bloomPassExtract\.radiusScale\)\) \* shadowFactor;/);
+  assert.match(shaderSource, /let bloomColor = sample_bloom_color\(t_bloom_composite, s_composite, uv\);/);
+  assert.doesNotMatch(shaderSource, /sample_bloom_shadow_factor_filtered\(t_scene_mask_composite/);
+  assert.match(shaderSource, /let center = sample_bloom_color\(textureValue, samplerValue, uv\) \* 4\.0;/);
+  assert.match(shaderSource, /let highResColor = sample_bloom_color\(t_bloom_primary, s_bloom_pass, uv\)/);
+  assert.doesNotMatch(shaderSource, /if \(center\.a < 0\.5\) {\s*return 1\.0;\s*}/);
+  assert.doesNotMatch(shaderSource, /textureSampleLevel\(t_bloom_shadow_debug/);
+  assert.doesNotMatch(shaderSource, /textureLoad\(t_bloom_composite/);
+});
