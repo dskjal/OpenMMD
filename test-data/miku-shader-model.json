@@ -1,0 +1,12 @@
+{
+  "type": "model",
+  "targetModel": {
+    "name": "Miku Shader Fixture"
+  },
+  "materials": [
+    {
+      "name": "body",
+      "shader": "mmd-shader-hdr-ao.wgsl"
+    }
+  ]
+}

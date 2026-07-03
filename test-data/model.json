@@ -1,0 +1,105 @@
+{
+  "type": "model",
+  "targetModel": {
+    "name": "初音ミク"
+  },
+  "bones": [
+    {
+      "name": "右ひじ",
+      "ikRotationLocks": {
+        "x": true,
+        "y": false,
+        "z": true
+      }
+    }
+  ],
+  "materials": [
+    {
+      "name": "cloth",
+      "shader": "mmd-shader.wgsl",
+      "visibility": {
+        "visible": true,
+        "ssss": true,
+        "castShadow": true,
+        "receiveShadow": true
+      },
+      "raster": {
+        "noCull": false,
+        "hasEdge": false
+      },
+      "toonTexture": {
+        "kind": "internal",
+        "toonIndex": 0
+      },
+      "diffuse": [1, 0, 0, 1],
+      "metallic": 0,
+      "roughness": 1,
+      "emissive": {
+        "source": "color",
+        "color": [0, 0, 0],
+        "strength": 0,
+        "texture": {
+          "kind": "none"
+        }
+      }
+    },
+    {
+      "name": "skin",
+      "shader": "mmd-shader.wgsl",
+      "visibility": {
+        "visible": true,
+        "ssss": true,
+        "castShadow": true,
+        "receiveShadow": true
+      },
+      "raster": {
+        "noCull": false,
+        "hasEdge": false
+      },
+      "toonTexture": {
+        "kind": "internal",
+        "toonIndex": 0
+      },
+      "diffuse": [1, 0, 0, 1],
+      "metallic": 0,
+      "roughness": 1,
+      "emissive": {
+        "source": "color",
+        "color": [0, 0, 0],
+        "strength": 0,
+        "texture": {
+          "kind": "none"
+        }
+      }
+    },
+    {
+      "name": "頭",
+      "shader": "mmd-shader.wgsl",
+      "visibility": {
+        "visible": true,
+        "ssss": true,
+        "castShadow": true,
+        "receiveShadow": true
+      },
+      "raster": {
+        "noCull": false,
+        "hasEdge": false
+      },
+      "toonTexture": {
+        "kind": "internal",
+        "toonIndex": 0
+      },
+      "diffuse": [1, 0, 0, 1],
+      "metallic": 0,
+      "roughness": 1,
+      "emissive": {
+        "source": "color",
+        "color": [0, 0, 0],
+        "strength": 0,
+        "texture": {
+          "kind": "none"
+        }
+      }
+    }
+  ]
+}

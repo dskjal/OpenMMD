@@ -1,0 +1,98 @@
+{
+  "type": "ui",
+  "animation": {
+    "playbackRange": {
+      "start": 0,
+      "end": 240
+    }
+  },
+  "shortcuts": {
+    "showBones": true,
+    "showBoneAxes": false,
+    "showPhysics": false,
+    "disablePhysics": false,
+    "hideIkBones": false,
+    "hideSpringBones": false,
+    "showGridXZ": true,
+    "showGridXY": false,
+    "showGridYZ": false,
+    "boneThickness": 1,
+    "gridSize": 0.5,
+    "gridCount": 10,
+    "gridThickness": 1
+  },
+  "videoExport": {
+    "format": "webm",
+    "codec": "vp9",
+    "quality": "high",
+    "width": 1920,
+    "height": 1080,
+    "includeAudio": true,
+    "transparentBackground": false
+  },
+  "render": {
+    "displayPreset": "hdr",
+    "renderingFps": 60,
+    "viewTransform": "aces-2.0",
+    "displayColorSpace": "display-p3",
+    "aspectRatio": "16:9",
+    "internalResolution": "1920x1080",
+    "aaMethod": "msaa4",
+    "environmentHdrIntensity": 1.4,
+    "shadowBias": 0.0002,
+    "shadowPower": 2.5,
+    "shadowStrength": 0.85,
+    "shadowEdgeOpacity": 0.4,
+    "showCascadeShadowMaps": false,
+    "showBloomShadowDebug": false,
+    "bloomShadowDebugMode": 0,
+    "shadowMapSize": 4096,
+    "shadowFarAuto": true,
+    "shadowFar": 60,
+    "ambientOcclusionEnabled": true,
+    "ambientOcclusionRadius": 0.4,
+    "ambientOcclusionBias": 0.02,
+    "ambientOcclusionIntensity": 1.2,
+    "ambientOcclusionBlurAmount": 1.5,
+    "ambientOcclusionSampleCount": 12,
+    "contactShadowEnabled": true,
+    "contactShadowLength": 0.08,
+    "contactShadowThickness": 0.01,
+    "contactShadowIntensity": 0.55,
+    "contactShadowBlurAmount": 1,
+    "contactShadowStepCount": 8
+  },
+  "postEffect": {
+    "bloomEnabled": true,
+    "dofEnabled": false,
+    "colorTemperature": 6500,
+    "bloomThreshold": 0.98,
+    "gamma": 1.1,
+    "chromaticAberration": 0.05,
+    "filmGrainAmount": 0.2,
+    "filmGrainAnimationMode": "timeline",
+    "bloomBlurAmount": 2,
+    "bloomAlpha": 1,
+    "bloomShadowMultiplier": 0.1,
+    "dofAlgorithm": "fast",
+    "dofFStop": 2.8,
+    "sssEnabled": false,
+    "sssRadius": 1.5,
+    "sssDepthThreshold": 0.01,
+    "sssNormalThreshold": 0.2,
+    "sssStrength": 0.2
+  },
+  "camera": {
+    "modelName": "Alicia",
+    "boneName": "Head",
+    "fov": 45,
+    "position": [0, 10, 35],
+    "rotation": [0, 0, 0],
+    "target": [0, 10, 0]
+  },
+  "light": {
+    "position": [0, 10, 20],
+    "rotation": [35, 0, 0],
+    "gltfLightStrength": 1.8
+  }
+}
