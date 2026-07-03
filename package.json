@@ -1,0 +1,12 @@
+{
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "build:pages": "node scripts/build-pages.mjs"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "mediabunny": "^1.44.0",
+    "three": "^0.184.0"
+  }
+}

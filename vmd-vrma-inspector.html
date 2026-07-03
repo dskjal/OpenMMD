@@ -1,0 +1,737 @@
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VMD/VRMA Inspector</title>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "./source/lib/three.module.js",
+                "three/": "./source/lib/three/"
+            }
+        }
+    </script>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3efe8;
+            --panel: rgba(255, 255, 255, 0.82);
+            --panel-border: rgba(32, 28, 20, 0.14);
+            --text: #201b16;
+            --muted: #61584f;
+            --accent: #2e6b5f;
+            --accent-soft: rgba(46, 107, 95, 0.12);
+            --shadow: 0 18px 48px rgba(44, 34, 24, 0.14);
+        }
+
+        html,
+        body {
+            margin: 0;
+            min-height: 100%;
+            color: var(--text);
+            font-family: "Segoe UI", "Yu Gothic UI", "Hiragino Sans", sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(226, 213, 190, 0.8), transparent 34%),
+                radial-gradient(circle at top right, rgba(176, 214, 206, 0.8), transparent 28%),
+                linear-gradient(180deg, #f8f4ee 0%, #f1ece4 100%);
+        }
+
+        body {
+            box-sizing: border-box;
+            padding: 24px;
+        }
+
+        .shell {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0 0 16px;
+            font-size: clamp(1.6rem, 2vw, 2.2rem);
+            letter-spacing: 0.02em;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            border-radius: 18px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        .drop-zone {
+            padding: 24px;
+            border: 2px dashed rgba(46, 107, 95, 0.38);
+            border-radius: 18px;
+            text-align: center;
+            color: var(--muted);
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+        }
+
+        .drop-zone.is-dragover {
+            border-color: var(--accent);
+            background: var(--accent-soft);
+            transform: translateY(-1px);
+        }
+
+        .drop-zone strong {
+            display: block;
+            margin-bottom: 8px;
+            color: var(--text);
+            font-size: 1.05rem;
+        }
+
+        .content {
+            margin-top: 18px;
+            padding: 18px;
+        }
+
+        .file-row,
+        .slider-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .file-row {
+            margin-bottom: 16px;
+        }
+
+        label {
+            font-weight: 600;
+            color: var(--muted);
+        }
+
+        select,
+        input[type="range"] {
+            width: 100%;
+        }
+
+        select {
+            flex: 1 1 320px;
+            min-width: 220px;
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid rgba(32, 28, 20, 0.18);
+            background: rgba(255, 255, 255, 0.92);
+            color: var(--text);
+            font: inherit;
+        }
+
+        .slider-wrap {
+            margin-bottom: 18px;
+        }
+
+        .slider-meta {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+            color: var(--muted);
+        }
+
+        input[type="range"] {
+            appearance: none;
+            height: 10px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, rgba(46, 107, 95, 0.35), rgba(46, 107, 95, 0.12));
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.95);
+            background: var(--accent);
+            box-shadow: 0 4px 14px rgba(46, 107, 95, 0.32);
+            cursor: pointer;
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            border: 2px solid rgba(255, 255, 255, 0.95);
+            background: var(--accent);
+            box-shadow: 0 4px 14px rgba(46, 107, 95, 0.32);
+            cursor: pointer;
+        }
+
+        .message {
+            margin: 0 0 14px;
+            color: var(--muted);
+            white-space: pre-wrap;
+        }
+
+        .table-wrap {
+            overflow: auto;
+            border-radius: 16px;
+            border: 1px solid rgba(32, 28, 20, 0.12);
+            background: rgba(255, 255, 255, 0.76);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: rgba(246, 241, 233, 0.96);
+            text-align: left;
+            padding: 12px 14px;
+            border-bottom: 1px solid rgba(32, 28, 20, 0.12);
+            font-size: 0.92rem;
+            color: var(--muted);
+        }
+
+        tbody td {
+            padding: 11px 14px;
+            border-bottom: 1px solid rgba(32, 28, 20, 0.08);
+            vertical-align: top;
+            word-break: break-word;
+        }
+
+        tbody tr:nth-child(even) td {
+            background: rgba(46, 107, 95, 0.04);
+        }
+
+        .mono {
+            font-family: "Consolas", "SFMono-Regular", "Courier New", monospace;
+            font-size: 0.95rem;
+        }
+
+        .status {
+            color: var(--muted);
+            font-size: 0.95rem;
+            margin-top: 10px;
+        }
+
+        @media (max-width: 720px) {
+            body {
+                padding: 14px;
+            }
+
+            .content {
+                padding: 14px;
+            }
+
+            thead th,
+            tbody td {
+                padding: 10px 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="shell">
+        <h1>VMD / VRMA Inspector</h1>
+        <div id="drop-zone" class="drop-zone panel" role="button" tabindex="0" aria-label="VMD または VRMA ファイルをここにドラッグ＆ドロップ">
+            <strong>VMD / VRMA ファイルをここにドラッグ＆ドロップ</strong>
+            <div>zip やフォルダ内の .vmd / .vrma も読めます。</div>
+        </div>
+
+        <section class="content panel" aria-label="inspection result">
+            <div id="file-row" class="file-row" hidden>
+                <label for="file-selector">File</label>
+                <select id="file-selector"></select>
+            </div>
+
+            <div class="slider-wrap">
+                <div class="slider-meta">
+                    <span id="frame-label">Frame: -</span>
+                    <span id="key-label">Key: - / -</span>
+                </div>
+                <input id="key-slider" type="range" min="0" max="0" step="1" value="0" disabled>
+            </div>
+
+            <p id="message" class="message">ファイルをドロップしてください。</p>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 28%;">Bone</th>
+                            <th style="width: 38%;">Quaternion x y z w</th>
+                            <th style="width: 34%;">Euler x y z (deg)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <tr>
+                            <td colspan="3" class="status">No file loaded.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script type="module">
+        import { VMDLoader } from './source/infrastructure/loaders/vmd-loader.js';
+        import { VRMALoader } from './source/infrastructure/loaders/vrma-loader.js';
+        import { quaternionToEulerXYZ } from './source/shared/math/math-utils.js';
+        import { collectDroppedFiles, createZipFileViews, loadZipArchive, resolveDroppedInput } from './source/infrastructure/io/file-loading.js';
+
+        const dropZone = document.getElementById('drop-zone');
+        const fileRow = document.getElementById('file-row');
+        const fileSelector = document.getElementById('file-selector');
+        const keySlider = document.getElementById('key-slider');
+        const frameLabel = document.getElementById('frame-label');
+        const keyLabel = document.getElementById('key-label');
+        const message = document.getElementById('message');
+        const tableBody = document.getElementById('table-body');
+
+        /** @type {{name: string, kind: 'vmd'|'vrma', frames: number[], keyframesByFrame: Map<number, Array<{boneName: string, quaternion: number[], eulerDegrees: number[]}>>}|null} */
+        let activeDataset = null;
+        /** @type {Array<{name: string, kind: 'file'|'zip', file?: File, zipFiles?: Object<string, {async: function(string): Promise<(ArrayBuffer|Blob|null)>}>}>} */
+        let loadedTargets = [];
+
+        /**
+         * Returns the display name for a file or zip entry.
+         * @param {{name?: string, path?: string}|File} file - Target file.
+         * @returns {string} Display name.
+         */
+        function getDisplayName(file) {
+            return String(file?.name || file?.path || 'unknown');
+        }
+
+        /**
+         * Returns a lower-cased file extension.
+         * @param {string} fileName - File name.
+         * @returns {string} Extension including leading dot.
+         */
+        function getLowerCaseFileExtension(fileName) {
+            const name = String(fileName || '').trim().toLowerCase();
+            const index = name.lastIndexOf('.');
+            return index >= 0 ? name.slice(index) : '';
+        }
+
+        /**
+         * Converts radians to degrees.
+         * @param {number} value - Input radians.
+         * @returns {number} Degrees.
+         */
+        function radiansToDegrees(value) {
+            return Number(value) * 180 / Math.PI;
+        }
+
+        /**
+         * Formats a numeric vector.
+         * @param {ArrayLike<number>} values - Input values.
+         * @param {number} fractionDigits - Fraction digits.
+         * @returns {string} Formatted string.
+         */
+        function formatVector(values, fractionDigits) {
+            return Array.from(values || [], (value) => Number(value).toFixed(fractionDigits)).join(', ');
+        }
+
+        /**
+         * Clears the output table.
+         */
+        function clearTable() {
+            tableBody.innerHTML = '<tr><td colspan="3" class="status">No keyframes.</td></tr>';
+        }
+
+        /**
+         * Updates the slider and table for the selected frame.
+         * @returns {void}
+         */
+        function renderSelectedFrame() {
+            if (!activeDataset || activeDataset.frames.length === 0) {
+                keySlider.disabled = true;
+                keySlider.min = '0';
+                keySlider.max = '0';
+                keySlider.value = '0';
+                frameLabel.textContent = 'Frame: -';
+                keyLabel.textContent = 'Key: - / -';
+                clearTable();
+                return;
+            }
+
+            const clampedIndex = Math.min(activeDataset.frames.length - 1, Math.max(0, Number(keySlider.value) || 0));
+            const frameNum = activeDataset.frames[clampedIndex];
+            const rows = activeDataset.keyframesByFrame.get(frameNum) || [];
+
+            keySlider.disabled = activeDataset.frames.length <= 1;
+            keySlider.min = '0';
+            keySlider.max = String(activeDataset.frames.length - 1);
+            keySlider.value = String(clampedIndex);
+
+            frameLabel.textContent = `Frame: ${frameNum}`;
+            keyLabel.textContent = `Key: ${clampedIndex + 1} / ${activeDataset.frames.length}`;
+
+            if (rows.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="3" class="status">No bone rotation keyframes at this frame.</td></tr>';
+                return;
+            }
+
+            const fragment = document.createDocumentFragment();
+            for (const row of rows) {
+                const tr = document.createElement('tr');
+                const quaternionText = formatVector(row.quaternion, 6);
+                const eulerText = formatVector(row.eulerDegrees, 3);
+
+                const boneCell = document.createElement('td');
+                boneCell.textContent = row.boneName;
+
+                const quaternionCell = document.createElement('td');
+                quaternionCell.className = 'mono';
+                quaternionCell.textContent = quaternionText;
+
+                const eulerCell = document.createElement('td');
+                eulerCell.className = 'mono';
+                eulerCell.textContent = eulerText;
+
+                tr.appendChild(boneCell);
+                tr.appendChild(quaternionCell);
+                tr.appendChild(eulerCell);
+                fragment.appendChild(tr);
+            }
+
+            tableBody.replaceChildren(fragment);
+        }
+
+        /**
+         * Builds a display row from a quaternion keyframe.
+         * @param {string} boneName - Bone name.
+         * @param {ArrayLike<number>} quaternion - Quaternion.
+         * @returns {{boneName: string, quaternion: number[], eulerDegrees: number[]}} Row.
+         */
+        function createBoneRotationRow(boneName, quaternion) {
+            const normalizedQuaternion = [
+                Number(quaternion?.[0]) || 0,
+                Number(quaternion?.[1]) || 0,
+                Number(quaternion?.[2]) || 0,
+                Number.isFinite(Number(quaternion?.[3])) ? Number(quaternion[3]) : 1,
+            ];
+            const eulerRadians = quaternionToEulerXYZ(normalizedQuaternion);
+            return {
+                boneName: String(boneName || ''),
+                quaternion: normalizedQuaternion,
+                eulerDegrees: eulerRadians.map(radiansToDegrees),
+            };
+        }
+
+        /**
+         * Normalizes a VMD dataset to frame-based bone rotation rows.
+         * @param {object} vmd - Parsed VMD.
+         * @param {string} sourceName - Source file name.
+         * @returns {{name: string, kind: 'vmd', frames: number[], keyframesByFrame: Map<number, Array<{boneName: string, quaternion: number[], eulerDegrees: number[]}>>}} Dataset.
+         */
+        function createDatasetFromVmd(vmd, sourceName) {
+            const frameMap = new Map();
+            for (const keyframe of Array.isArray(vmd?.boneKeyframes) ? vmd.boneKeyframes : []) {
+                const frameNum = Math.round(Number(keyframe?.frameNum) || 0);
+                const boneName = String(keyframe?.boneName || '').trim();
+                if (!boneName) {
+                    continue;
+                }
+
+                const row = createBoneRotationRow(boneName, keyframe?.rotation);
+                const rows = frameMap.get(frameNum) || [];
+                const existingIndex = rows.findIndex((entry) => entry.boneName === row.boneName);
+                if (existingIndex >= 0) {
+                    rows[existingIndex] = row;
+                } else {
+                    rows.push(row);
+                }
+                frameMap.set(frameNum, rows);
+            }
+
+            const frames = Array.from(frameMap.keys()).sort((left, right) => left - right);
+            for (const frameNum of frames) {
+                frameMap.get(frameNum).sort((left, right) => left.boneName.localeCompare(right.boneName, 'ja'));
+            }
+
+            return {
+                name: sourceName,
+                kind: 'vmd',
+                frames,
+                keyframesByFrame: frameMap,
+            };
+        }
+
+        /**
+         * Normalizes a VRMA dataset to frame-based bone rotation rows.
+         * @param {object} source - Parsed VRMA animation source.
+         * @param {string} sourceName - Source file name.
+         * @returns {{name: string, kind: 'vrma', frames: number[], keyframesByFrame: Map<number, Array<{boneName: string, quaternion: number[], eulerDegrees: number[]}>>}} Dataset.
+         */
+        function createDatasetFromVrma(source, sourceName) {
+            const frameMap = new Map();
+            const channels = Array.isArray(source?.clip?.channels) ? source.clip.channels : [];
+
+            for (const channel of channels) {
+                if (String(channel?.target?.kind || '') !== 'bone') {
+                    continue;
+                }
+                if (String(channel?.target?.path || '') !== 'rotation') {
+                    continue;
+                }
+
+                const boneName = String(channel?.target?.name || channel?.target?.nodeName || '').trim();
+                if (!boneName) {
+                    continue;
+                }
+
+                for (const keyframe of Array.isArray(channel?.sampler?.keyframes) ? channel.sampler.keyframes : []) {
+                    const frameNum = Number.isFinite(Number(keyframe?.frameNum))
+                        ? Math.round(Number(keyframe.frameNum))
+                        : Math.round((Number(keyframe?.time) || 0) * (Number(source?.clip?.timelineFps) || 30));
+                    const row = createBoneRotationRow(boneName, keyframe?.value);
+                    const rows = frameMap.get(frameNum) || [];
+                    const existingIndex = rows.findIndex((entry) => entry.boneName === row.boneName);
+                    if (existingIndex >= 0) {
+                        rows[existingIndex] = row;
+                    } else {
+                        rows.push(row);
+                    }
+                    frameMap.set(frameNum, rows);
+                }
+            }
+
+            const frames = Array.from(frameMap.keys()).sort((left, right) => left - right);
+            for (const frameNum of frames) {
+                frameMap.get(frameNum).sort((left, right) => left.boneName.localeCompare(right.boneName, 'ja'));
+            }
+
+            return {
+                name: sourceName,
+                kind: 'vrma',
+                frames,
+                keyframesByFrame: frameMap,
+            };
+        }
+
+        /**
+         * Loads a file or zip entry and updates the active dataset.
+         * @param {{name: string, kind: 'file'|'zip', file?: File, zipFiles?: Object<string, {async: function(string): Promise<(ArrayBuffer|Blob|null)>}>}} target - Load target.
+         * @returns {Promise<void>}
+         */
+        async function loadTarget(target) {
+            message.textContent = '';
+            activeDataset = null;
+            clearTable();
+
+            const name = String(target?.name || '');
+            const lowerName = name.toLowerCase();
+            let buffer = null;
+
+            if (target?.kind === 'zip') {
+                const files = createZipFileViews(target.zipFiles || {});
+                const supportedFiles = files.filter((file) => {
+                    const extension = getLowerCaseFileExtension(getDisplayName(file));
+                    return extension === '.vmd' || extension === '.vrma';
+                }).sort((left, right) => getDisplayName(left).localeCompare(getDisplayName(right), 'ja'));
+                if (supportedFiles.length === 0) {
+                    throw new Error('No .vmd or .vrma file found in the archive.');
+                }
+
+                loadedTargets = supportedFiles.map((file) => ({
+                    name: getDisplayName(file),
+                    kind: 'file',
+                    file,
+                }));
+                renderFileSelector();
+                await loadSelectedFile(0);
+                return;
+            }
+
+            if (target?.kind !== 'file' || !target.file) {
+                throw new Error('Unsupported drop target.');
+            }
+
+            if (lowerName.endsWith('.zip')) {
+                const zip = await loadZipArchive(target.file);
+                const files = createZipFileViews(zip.files);
+                const supportedFiles = files.filter((file) => {
+                    const extension = getLowerCaseFileExtension(getDisplayName(file));
+                    return extension === '.vmd' || extension === '.vrma';
+                }).sort((left, right) => getDisplayName(left).localeCompare(getDisplayName(right), 'ja'));
+                if (supportedFiles.length === 0) {
+                    throw new Error('No .vmd or .vrma file found in the archive.');
+                }
+
+                loadedTargets = supportedFiles.map((file) => ({
+                    name: getDisplayName(file),
+                    kind: 'file',
+                    file,
+                }));
+                renderFileSelector();
+                await loadSelectedFile(0);
+                return;
+            }
+
+            loadedTargets = [{
+                name,
+                kind: 'file',
+                file: target.file,
+            }];
+            renderFileSelector();
+            buffer = await readFileBuffer(target.file);
+            await loadBuffer(buffer, name);
+        }
+
+        /**
+         * Renders the file selector for multi-file drops.
+         */
+        function renderFileSelector() {
+            if (loadedTargets.length <= 1) {
+                fileRow.hidden = true;
+                fileSelector.innerHTML = '';
+                return;
+            }
+
+            fileRow.hidden = false;
+            fileSelector.replaceChildren();
+            loadedTargets.forEach((target, index) => {
+                const option = document.createElement('option');
+                option.value = String(index);
+                option.textContent = target.name;
+                fileSelector.appendChild(option);
+            });
+            fileSelector.value = '0';
+        }
+
+        /**
+         * Reads a file-like object into ArrayBuffer.
+         * @param {File|{async: function(string): Promise<(ArrayBuffer|Blob|null)>}} file - File-like object.
+         * @returns {Promise<ArrayBuffer>} Buffer.
+         */
+        async function readFileBuffer(file) {
+            if (file && typeof file.async === 'function') {
+                const buffer = await file.async('arraybuffer');
+                if (buffer instanceof ArrayBuffer) {
+                    return buffer;
+                }
+                if (ArrayBuffer.isView(buffer)) {
+                    return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+                }
+                throw new Error('Failed to read zip entry.');
+            }
+
+            if (file && typeof file.arrayBuffer === 'function') {
+                return await file.arrayBuffer();
+            }
+
+            throw new Error('Unsupported file object.');
+        }
+
+        /**
+         * Loads the target at the requested index.
+         * @param {number} index - Target index.
+         * @returns {Promise<void>}
+         */
+        async function loadSelectedFile(index) {
+            const target = loadedTargets[index];
+            if (!target) {
+                return;
+            }
+
+            fileSelector.value = String(index);
+            const buffer = await readFileBuffer(target.file);
+            await loadBuffer(buffer, target.name);
+        }
+
+        /**
+         * Parses a buffer and renders it.
+         * @param {ArrayBuffer} buffer - File contents.
+         * @param {string} sourceName - Source file name.
+         * @returns {Promise<void>}
+         */
+        async function loadBuffer(buffer, sourceName) {
+            const extension = getLowerCaseFileExtension(sourceName);
+            if (extension === '.vmd') {
+                const vmd = await new VMDLoader().parse(buffer);
+                activeDataset = createDatasetFromVmd(vmd, sourceName);
+            } else if (extension === '.vrma') {
+                const source = await new VRMALoader().parse(buffer, sourceName);
+                activeDataset = createDatasetFromVrma(source, sourceName);
+            } else {
+                throw new Error('Unsupported file type. Please drop a .vmd or .vrma file.');
+            }
+
+            if (!activeDataset.frames.length) {
+                message.textContent = `${sourceName}\nNo bone rotation keyframes found.`;
+                renderSelectedFrame();
+                return;
+            }
+
+            message.textContent = `${sourceName}\nLoaded ${activeDataset.frames.length} frame(s).`;
+            keySlider.disabled = activeDataset.frames.length <= 1;
+            keySlider.min = '0';
+            keySlider.max = String(activeDataset.frames.length - 1);
+            keySlider.value = '0';
+            renderSelectedFrame();
+        }
+
+        /**
+         * Handles a dropped file batch.
+         * @param {DragEvent} event - Drag event.
+         * @returns {Promise<void>}
+         */
+        async function handleDrop(event) {
+            event.preventDefault();
+            dropZone.classList.remove('is-dragover');
+
+            const dropped = await collectDroppedFiles(event.dataTransfer);
+            const target = resolveDroppedInput(dropped);
+            if (!target) {
+                return;
+            }
+
+            try {
+                if (target.kind === 'zip') {
+                    await loadTarget({ name: 'archive.zip', kind: 'zip', zipFiles: target.zipFiles });
+                } else {
+                    await loadTarget({ name: getDisplayName(target.file), kind: 'file', file: target.file });
+                }
+            } catch (error) {
+                message.textContent = error instanceof Error ? error.message : String(error);
+                activeDataset = null;
+                clearTable();
+                renderSelectedFrame();
+                console.error(error);
+            }
+        }
+
+        dropZone.addEventListener('dragenter', (event) => {
+            event.preventDefault();
+            dropZone.classList.add('is-dragover');
+        });
+
+        dropZone.addEventListener('dragover', (event) => {
+            event.preventDefault();
+            dropZone.classList.add('is-dragover');
+        });
+
+        dropZone.addEventListener('dragleave', (event) => {
+            event.preventDefault();
+            dropZone.classList.remove('is-dragover');
+        });
+
+        dropZone.addEventListener('drop', handleDrop);
+        fileSelector.addEventListener('change', async () => {
+            try {
+                await loadSelectedFile(Number(fileSelector.value) || 0);
+            } catch (error) {
+                message.textContent = error instanceof Error ? error.message : String(error);
+                console.error(error);
+            }
+        });
+        keySlider.addEventListener('input', () => {
+            renderSelectedFrame();
+        });
+    </script>
+</body>
+</html>

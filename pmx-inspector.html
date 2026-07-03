@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>PMX/VMD Inspector</title>
+</head>
+<body>
+    <h1>PMX/VMD Inspector</h1>
+    <div id="drop-zone" style="border: 2px dashed #ccc; padding: 20px; text-align: center; margin-bottom: 20px;">
+        PMX, PMD または VMD ファイルをここにドラッグ＆ドロップ
+    </div>
+    <div id="model-selector"></div>
+    <pre id="output"></pre>
+
+    <script type="module">
+        import { PMXLoader } from './source/loader/pmx-loader.js';
+        import { PMDLoader } from './source/loader/pmd-loader.js';
+        import { VMDLoader } from './source/loader/vmd-loader.js';
+        import { collectDroppedFiles, createZipFileViews, loadZipArchive, resolveDroppedInput } from './source/file-loading.js';
+
+        const output = document.getElementById('output');
+        const log = (msg) => output.textContent += msg + '\n';
+        const dropZone = document.getElementById('drop-zone');
+        const modelSelector = document.getElementById('model-selector');
+
+        async function loadModel(input) {
+            output.textContent = '';
+            modelSelector.innerHTML = '';
+            
+            try {
+                let files = [];
+                if (input instanceof File) {
+                    if (input.name.toLowerCase().endsWith('.zip')) {
+                        const zip = await loadZipArchive(input);
+                        files = createZipFileViews(zip.files);
+                    } else {
+                        files = [input];
+                    }
+                } else if (input.files && input.files.length > 0) {
+                    if (input.hasDirectory || input.files.length > 1) {
+                        files = createZipFileViews(input.zipFiles);
+                    } else {
+                        files = [input.files[0]];
+                    }
+                } else if (input.zipFiles) {
+                    files = createZipFileViews(input.zipFiles);
+                }
+
+                const targetFiles = files.filter(f => (f.name || f.path || "").toLowerCase().match(/\.(pmx|pmd|vmd)$/));
+                if (targetFiles.length === 0) throw new Error('No .pmx, .pmd or .vmd file found');
+
+                if (targetFiles.length > 1) {
+                    const select = document.createElement('select');
+                    targetFiles.forEach((f, i) => {
+                        const opt = document.createElement('option');
+                        opt.value = i;
+                        opt.textContent = f.name || f.path;
+                        select.appendChild(opt);
+                    });
+                    modelSelector.appendChild(select);
+                    select.addEventListener('change', () => displayFile(targetFiles[select.value]));
+                }
+
+                displayFile(targetFiles[0]);
+            } catch (err) {
+                log('--- Error ---');
+                log(err.message);
+                console.error(err);
+            }
+        }
+
+        async function displayFile(file) {
+            output.textContent = '';
+            log('Displaying: ' + (file.name || file.path));
+            
+            try {
+                let buffer;
+                if (file.async) { buffer = await file.async('arraybuffer'); }
+                else { buffer = await file.arrayBuffer(); }
+
+                const lowerName = (file.name || file.path).toLowerCase();
+                if (lowerName.endsWith('.pmx')) {
+                    displayPMX(buffer);
+                } else if (lowerName.endsWith('.pmd')) {
+                    displayPMD(buffer);
+                } else {
+                    displayVMD(buffer);
+                }
+            } catch (err) {
+                log('--- Error ---');
+                log(err.message);
+                console.error(err);
+            }
+        }
+
+        async function displayPMX(buffer) {
+            const loader = new PMXLoader();
+            const model = await loader.parse(buffer);
+            
+            log('Model name: ' + model.name);
+            log('Vertices count: ' + (model.vertexCount).toLocaleString());
+            log('Indices count: ' + model.indices.length.toLocaleString());
+            log('Polygon count: ' + (model.indices.length/3).toLocaleString());
+
+            log('\n--- Header ---');
+            log('Version: ' + model.version);
+            log('Encoding: ' + (model.config.encoding === 0 ? 'UTF-16LE' : 'UTF-8'));
+            log('Name (JP): ' + model.name);
+            log('Name (EN): ' + model.nameEn);
+            log('Comment (JP): ' + model.comment);
+            log('Comment (EN): ' + model.commentEn);
+            log('Extra UV count: ' + model.config.extraUV);
+            log('Index Sizes: Vtx=' + model.config.vertexIndexSize + 
+                ', Tex=' + model.config.textureIndexSize + 
+                ', Mat=' + model.config.materialIndexSize + 
+                ', Bone=' + model.config.boneIndexSize + 
+                ', Morph=' + model.config.morphIndexSize + 
+                ', RB=' + model.config.rigidbodyIndexSize);
+            log('Globals count: ' + model.configSize);
+            log('Globals: ' + Array.from(model.configData).join(', '));
+
+            log('\n--- Vertex Weight Deform Types ---');
+            const weightTypeNames = { 0: 'BDEF1', 1: 'BDEF2', 2: 'BDEF4', 3: 'SDEF', 4: 'QDEF' };
+            const weightCounts = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0 };
+            model.weightTypes.forEach((type) => { if (weightCounts.hasOwnProperty(type)) weightCounts[type]++; });
+            for (const [type, count] of Object.entries(weightCounts)) {
+                if (count > 0) log(`${weightTypeNames[type]}: ${count.toLocaleString()}`);
+            }
+
+            const logList = (title, items) => {
+                log(`\n--- ${title} (${items.length}) ---`);
+                items.forEach(item => log('- ' + item.name));
+            };
+
+            log('\n--- Textures (' + model.textures.length + ') ---');
+            model.textures.forEach((t, i) => log(`[${i}] ${t}`));
+
+            log('\n--- Materials (' + model.materials.length + ') ---');
+            model.materials.forEach(m => {
+                const flags = [];
+                const bitMap = { 0: 'No-cull', 1: 'Ground shadow', 2: 'Draw shadow', 3: 'Receive shadow', 4: 'Has edge', 5: 'Vertex colour', 6: 'Point drawing', 7: 'Line drawing' };
+                for (let i = 0; i < 8; i++) { if ((m.flags & (1 << i))) flags.push(bitMap[i]); }
+                const envModeMap = { 0: 'Disabled', 1: 'Multiply', 2: 'Additive', 3: 'Additional vec4' };
+                const ambient = m.ambient.map(v => v.toFixed(3)).join(', ');
+                const diffuse = m.diffuse.map(v => v.toFixed(3)).join(', ');
+                const specular = m.specular.map(v => v.toFixed(3)).join(', ');
+                const edgeColor = m.edgeColor.map(v => v.toFixed(3)).join(', ');
+                const displayName = m.nameEn ? `${m.name} (${m.nameEn})` : m.name;
+                const toonModeStr = m.toonMode === 0 ? 'Texture' : 'Internal';
+                log(`- ${displayName} [${flags.join(', ')}], Ambient: [${ambient}], Diffuse (RGBA): [${diffuse}], Specular (RGB): [${specular}], EdgeColor (RGBA): [${edgeColor}], Texture Index: ${m.textureIndex}, Env Mode: ${m.sphereMode} (${envModeMap[m.sphereMode] || 'Unknown'}), Toon Index: ${m.toonIndex}, Toon Mode: ${m.toonMode} (${toonModeStr})`);
+            });
+            
+            log('\n--- Bones (' + model.bones.length + ') ---');
+            model.bones.forEach((b, i) => {
+                const flags = [];
+                const bitMap = { 0: 'Indexed tail position', 1: 'Rotatable', 2: 'Translatable', 3: 'Is visible', 4: 'Enabled', 5: 'IK', 8: 'Inherit rotation', 9: 'Inherit translation', 10: 'Fixed axis', 11: 'Local co-ordinate', 12: 'Physics after deform', 13: 'External parent deform' };
+                for (let j = 0; j < 16; j++) { if ((b.flags & (1 << j)) && bitMap[j]) flags.push(bitMap[j]); }
+                const displayName = b.nameEn ? `${b.name} (${b.nameEn})` : b.name;
+                const parentBone = model.bones[b.parentIndex];
+                const parentName = parentBone ? (parentBone.nameEn ? `${parentBone.name} (${parentBone.nameEn})` : parentBone.name) : 'None';
+                let boneInfo = `- [${i}] ${displayName} (Parent: ${b.parentIndex} - ${parentName}) [${flags.join(', ')}]`;
+                if (b.localX && b.localY && b.localZ) {
+                    const lx = b.localX.map(v => v.toFixed(3)).join(', ');
+                    const ly = b.localY.map(v => v.toFixed(3)).join(', ');
+                    const lz = b.localZ.map(v => v.toFixed(3)).join(', ');
+                    boneInfo += `\n    LocalAxis: X=[${lx}], Y=[${ly}], Z=[${lz}]`;
+                }
+                if (b.ik) {
+                    boneInfo += `\n    IK: Target=${b.ik.targetIndex}, Iterations=${b.ik.loopCount}, AngleLimit=${b.ik.limitAngle.toFixed(2)}`;
+                    b.ik.links.forEach((link, idx) => {
+                        boneInfo += `\n      Link[${idx}]: Bone=${link.boneIndex}, HasLimit=${link.hasLimit}`;
+                    });
+                }
+                log(boneInfo);
+            });
+
+            log('\n--- Morphs (' + model.morphs.length + ') ---');
+            model.morphs.forEach(m => {
+                const displayName = m.nameEn ? `${m.name} (${m.nameEn})` : m.name;
+                log(`- ${displayName}`);
+            });
+
+            log('\n--- RigidBodies (' + model.rigidBodies.length + ') ---');
+            const physicsModeMap = { 0: 'Follow bone', 1: 'Physics', 2: 'Physics + bone' };
+            const shapeMap = { 0: 'Sphere', 1: 'Box', 2: 'Capsule' };
+            model.rigidBodies.forEach((rb, i) => {
+                const displayName = rb.nameEn ? `${rb.name} (${rb.nameEn})` : rb.name;
+                const size = Array.isArray(rb.size) ? rb.size.map((v) => v.toFixed(3)).join(', ') : '';
+                const position = Array.isArray(rb.position) ? rb.position.map((v) => v.toFixed(3)).join(', ') : '';
+                const rotation = Array.isArray(rb.rotation) ? rb.rotation.map((v) => v.toFixed(3)).join(', ') : '';
+                log(`  [${i}] ${displayName}: Bone=${rb.boneIndex}, Shape=${shapeMap[rb.shape] || 'Unknown'}, Mode=${physicsModeMap[rb.physicsMode] || 'Unknown'}, Size=[${size}], Pos=[${position}], Rot=[${rotation}]`);
+            });
+
+            log('\n--- Display Frames (' + model.displayFrames.length + ') ---');
+            model.displayFrames.forEach((df, i) => {
+                const displayName = df.nameEn ? `${df.name} (${df.nameEn})` : df.name;
+                log(`- [${i}] ${displayName} (Special: ${df.specialFlag === 1})`);
+                df.frames.forEach((f) => {
+                    const item = f.type === 0 ? model.bones[f.index] : model.morphs[f.index];
+                    const name = item ? (item.nameEn ? `${item.name} (${item.nameEn})` : item.name) : 'Unknown';
+                    log(`    - ${f.type === 0 ? 'Bone' : 'Morph'} [${f.index}] ${name}`);
+                });
+            });
+        }
+
+        async function displayPMD(buffer) {
+            const loader = new PMDLoader();
+            const model = await loader.parse(buffer);
+            
+            log('Model name: ' + model.name);
+            log('Vertices count: ' + (model.vertices.length / 27).toLocaleString());
+            log('Indices count: ' + model.indices.length.toLocaleString());
+            log('Polygon count: ' + (model.indices.length/3).toLocaleString());
+
+            log('\n--- Header ---');
+            log('Magic: ' + model.magic);
+            log('Version: ' + model.version);
+            log('Name: ' + model.name);
+            log('Comment: ' + model.comment);
+
+            log('\n--- Textures (' + model.textures.length + ') ---');
+            model.textures.forEach((t, i) => log(`[${i}] ${t}`));
+
+            log('\n--- Materials (' + model.materials.length + ') ---');
+            model.materials.forEach((m, i) => {
+                const diffuse = m.diffuse.map(v => v.toFixed(3)).join(', ');
+                const specular = m.specular.map(v => v.toFixed(3)).join(', ');
+                const ambient = m.ambient.map(v => v.toFixed(3)).join(', ');
+                const toonModeStr = m.toonMode === 0 ? 'Texture' : 'Internal';
+                log(`- [${i}] Diffuse: [${diffuse}], Specular: [${specular}], Shininess: ${m.shininess.toFixed(3)}, Ambient: [${ambient}], Texture Index: ${m.textureIndex}, Sphere Index: ${m.sphereIndex}, Sphere Mode: ${m.sphereMode}, Toon Index: ${m.toonIndex}, Toon Mode: ${m.toonMode} (${toonModeStr})`);
+            });
+            
+            log('\n--- Bones (' + model.bones.length + ') ---');
+            model.bones.forEach((b, i) => {
+                const pos = b.position.map(v => v.toFixed(3)).join(', ');
+                const parentBone = model.bones[b.parentIndex];
+                const parentName = parentBone ? parentBone.name : 'None';
+                log(`- [${i}] ${b.name}: Parent=${b.parentIndex} (${parentName}), Tail=${b.tailIndex}, Type=${b.type}, IK=${b.ikIndex}, Pos=[${pos}]`);
+            });
+
+            log('\n--- IK (' + model.iks.length + ') ---');
+            model.iks.forEach((ik, i) => {
+                log(`- [${i}] Bone=${ik.index}, Target=${ik.targetBoneIndex}, Length=${ik.chainLength}, Iterations=${ik.iteration}, Limitation=${ik.limitation.toFixed(3)}`);
+                log(`    Links: ${ik.childBoneIndices.join(', ')}`);
+            });
+
+            log('\n--- RigidBodies (' + model.rigidBodies.length + ') ---');
+            const physicsModeMap = { 0: 'Follow bone', 1: 'Physics', 2: 'Physics + bone' };
+            const shapeMap = { 0: 'Sphere', 1: 'Box', 2: 'Capsule' };
+            model.rigidBodies.forEach((rb, i) => {
+                const displayName = rb.nameEn ? `${rb.name} (${rb.nameEn})` : rb.name;
+                const size = Array.isArray(rb.size) ? rb.size.map((v) => v.toFixed(3)).join(', ') : '';
+                const position = Array.isArray(rb.position) ? rb.position.map((v) => v.toFixed(3)).join(', ') : '';
+                const rotation = Array.isArray(rb.rotation) ? rb.rotation.map((v) => v.toFixed(3)).join(', ') : '';
+                log(`- [${i}] ${displayName}: Bone=${rb.boneIndex}, Shape=${shapeMap[rb.shape] || 'Unknown'}, Mode=${physicsModeMap[rb.physicsMode] || 'Unknown'}, Size=[${size}], Pos=[${position}], Rot=[${rotation}]`);
+            });
+
+            log('\n--- Joints (' + model.joints.length + ') ---');
+            model.joints.forEach((joint, i) => {
+                const displayName = joint.nameEn ? `${joint.name} (${joint.nameEn})` : joint.name;
+                const position = Array.isArray(joint.position) ? joint.position.map((v) => v.toFixed(3)).join(', ') : '';
+                const rotation = Array.isArray(joint.rotation) ? joint.rotation.map((v) => v.toFixed(3)).join(', ') : '';
+                const posMin = Array.isArray(joint.posMin) ? joint.posMin.map((v) => v.toFixed(3)).join(', ') : '';
+                const posMax = Array.isArray(joint.posMax) ? joint.posMax.map((v) => v.toFixed(3)).join(', ') : '';
+                const rotMin = Array.isArray(joint.rotMin) ? joint.rotMin.map((v) => v.toFixed(3)).join(', ') : '';
+                const rotMax = Array.isArray(joint.rotMax) ? joint.rotMax.map((v) => v.toFixed(3)).join(', ') : '';
+                log(`- [${i}] ${displayName}: A=${joint.rigidBodyIndexA}, B=${joint.rigidBodyIndexB}, Pos=[${position}], Rot=[${rotation}], PosMin=[${posMin}], PosMax=[${posMax}], RotMin=[${rotMin}], RotMax=[${rotMax}]`);
+            });
+        }
+
+        async function displayVMD(buffer) {
+            const loader = new VMDLoader();
+            const vmd = await loader.parse(buffer);
+
+            /**
+             * @param {ArrayLike<number>|null|undefined} values - 数値列。
+             * @param {number} digits - 小数点以下桁数。
+             * @returns {string}
+             */
+            const formatVector = (values, digits = 2) => {
+                if (!Array.isArray(values)) {
+                    return '[]';
+                }
+                return `[${values.map((value) => Number(value).toFixed(digits)).join(', ')}]`;
+            };
+            
+            log('Signature: ' + vmd.signature);
+            log('Model name: ' + vmd.modelName);
+            
+            const bones = {};
+            vmd.boneKeyframes.forEach(kf => {
+                if (!bones[kf.boneName]) bones[kf.boneName] = [];
+                bones[kf.boneName].push(kf.frameNum);
+            });
+            log('\n--- Bone keyframes ---');
+            for (const bone in bones) {
+                log(`${bone}: ${bones[bone].join(', ')}`);
+            }
+
+            const faces = {};
+            vmd.faceKeyframes.forEach(kf => {
+                if (!faces[kf.name]) faces[kf.name] = [];
+                faces[kf.name].push(kf.frameNum);
+            });
+            log('\n--- Face keyframes ---');
+            for (const face in faces) {
+                log(`${face}: ${faces[face].join(', ')}`);
+            }
+
+            log('\n--- Camera keyframes ---');
+            if (vmd.cameraKeyframes.length === 0) {
+                log('No camera keyframes.');
+            } else {
+                vmd.cameraKeyframes.forEach((kf, i) => {
+                    log(`[${i}] Frame: ${kf.frameNum}, Dist: ${kf.distance.toFixed(2)}, Target: ${formatVector(kf.target)}, Rot: ${formatVector(kf.rotation)}, FOV: ${kf.fov}, Perspective: ${kf.perspective}`);
+                });
+            }
+
+            log('\n--- Light keyframes ---');
+            if (vmd.lightKeyframes.length === 0) {
+                log('No light keyframes.');
+            } else {
+                vmd.lightKeyframes.forEach((kf, i) => {
+                    const keyedPosition = kf.keyedPosition ? 'yes' : 'no';
+                    const keyedRotation = kf.keyedRotation ? 'yes' : 'no';
+                    log(`[${i}] Frame: ${kf.frameNum}, Color: ${formatVector(kf.color, 3)}, Position: ${formatVector(kf.position, 3)}, Direction: ${formatVector(kf.direction, 3)}, Rotation: ${formatVector(kf.rotation, 3)}, KeyedPosition: ${keyedPosition}, KeyedRotation: ${keyedRotation}`);
+                });
+            }
+        }
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#000';
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#ccc';
+        });
+
+        dropZone.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            dropZone.style.borderColor = '#ccc';
+            const dropped = await collectDroppedFiles(e.dataTransfer);
+            const target = resolveDroppedInput(dropped);
+            if (!target) {
+                return;
+            }
+
+            if (target.kind === 'zip') {
+                loadModel({ zipFiles: target.zipFiles, hasDirectory: true });
+                return;
+            }
+
+            if (target.kind === 'file') {
+                loadModel(target.file);
+            }
+        });
+    </script>
+</body>
+</html>

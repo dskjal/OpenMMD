@@ -1,0 +1,2791 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="source/ui/styles/ui-components.css">
+    <title>OpenMMD</title>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./source/lib/three.module.js",
+            "three/": "./source/lib/three/"
+        }
+    }
+    </script>
+    <style>
+        :root {
+            --primary-color: oklch(0.8228 0.0622 197.3);
+            --on-key-color: oklch(0.8228 0.0958 98.63);
+            --white-text-color: oklch(0.98 0 0);
+            --render-aspect-ratio: 16 / 9;
+            --shortcut-panel-width: 360px;
+            --model-list-delete-button-size: 34px;
+            --vmd-action-button-height: 24px;
+            --vmd-delete-button-size: 24px;
+            --color-temperature-item-gap: 5px;
+        }
+        body { margin: 0; background: #eee; overflow: hidden; display: flex; flex-direction: row; height: 100vh; font-family: sans-serif; touch-action: none; }
+        body.is-video-exporting {
+            cursor: progress;
+            overflow: hidden;
+        }
+        body.is-video-exporting #left-sidebar,
+        body.is-video-exporting #center-panel,
+        body.is-video-exporting #sidebar,
+        body.is-video-exporting .resizer {
+            pointer-events: none;
+            user-select: none;
+        }
+        #video-export-overlay[hidden] {
+            display: none !important;
+        }
+        #delete-confirm-overlay[hidden] {
+            display: none !important;
+        }
+        #color-picker-overlay[hidden] {
+            display: none !important;
+        }
+        #toon-texture-picker-overlay[hidden] {
+            display: none !important;
+        }
+        #animation-export-overlay[hidden] {
+            display: none !important;
+        }
+        #animation-export-vrma-options[hidden] {
+            display: none !important;
+        }
+        input[type="checkbox"] {accent-color: var(--primary-color);}
+        input[type="range"] {accent-color: var(--primary-color); background: white;}
+        input { text-align: right; }
+        select,
+        input[type="number"] {
+            box-sizing: border-box;
+            line-height: 1.2;
+            padding: 4px 8px;
+        }
+        #left-sidebar { width: 300px; min-width: 10px; max-width: 1500px; background: rgba(255,255,255,0.9); padding: 0; box-shadow: 2px 0 10px rgba(0,0,0,0.1); z-index: 10; overflow: hidden; display: flex; flex-direction: column; box-sizing: border-box; touch-action: auto; }
+        .resizer {
+            width: 10px;
+            cursor: col-resize;
+            background-color: #ddd;
+            z-index: 11;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .resizer:hover { background-color: #aaa; }
+        #center-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; min-height: 0; }
+
+        #viewport {
+            flex: 0 0 auto;
+            position: relative;
+            background: #ccc;
+            overflow: hidden;
+            display: flex;
+            align-items: stretch;
+            justify-content: center;
+            min-width: 0;
+            min-height: 0;
+        }
+
+        #viewport canvas {
+            width: 100%;
+            height: auto;
+            aspect-ratio: var(--render-aspect-ratio);
+            display: block;
+            background: #fff;
+            box-shadow: 0 0 20px rgba(0,0,0,0.2);
+            touch-action: none;
+        }
+        #camera-range-zoom-overlay {
+            position: absolute;
+            display: none;
+            box-sizing: border-box;
+            border: 1px dashed rgba(50, 120, 255, 0.98);
+            background: rgba(50, 120, 255, 0.10);
+            pointer-events: none;
+            z-index: 2;
+        }
+        #bone-box-selection-overlay {
+            position: absolute;
+            display: none;
+            box-sizing: border-box;
+            border: 1px dashed rgba(255, 96, 96, 0.98);
+            background: rgba(255, 96, 96, 0.10);
+            pointer-events: none;
+            z-index: 2;
+        }
+        body.is-depth-pick-mode #viewport canvas {
+            cursor: url("fonts/colorize_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg") 0 24, crosshair;
+        }
+        body.is-child-bone-pick-mode #viewport canvas {
+            cursor: url("fonts/colorize_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg") 0 24, crosshair;
+        }
+        body.is-color-temperature-pick-mode #viewport canvas {
+            cursor: url("fonts/colorize_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg") 0 24, crosshair;
+        }
+
+        #shortcut-panel { display: flex; flex: 1; flex-direction: row; background: #f0f0f0; padding: 10px; overflow-y: auto; overflow-x: hidden; border-top: 1px solid #ccc; min-width: 0; }
+        body.is-portrait-render-layout #center-panel {
+            flex-direction: row;
+        }
+        body.is-portrait-render-layout #viewport {
+            flex: 1 1 auto;
+        }
+        body.is-portrait-render-layout #viewport canvas {
+            width: auto;
+            height: 100%;
+        }
+        body.is-portrait-render-layout #shortcut-panel {
+            flex: 0 0 var(--shortcut-panel-width);
+            flex-direction: column;
+            order: -1;
+            border-top: 0;
+            border-left: 1px solid #ccc;
+            border-right: 0;
+            overflow-y: auto;
+        }
+        #sidebar { width: 450px; min-width: 10px; max-width: 1500px; background: rgba(255,255,255,0.9); padding: 20px; box-shadow: -2px 0 10px rgba(0,0,0,0.1); z-index: 10; overflow-y: auto; box-sizing: border-box; touch-action: auto; }
+        body.app-fullscreen #left-sidebar,
+        body.app-fullscreen #sidebar,
+        body.app-fullscreen #shortcut-panel,
+        body.app-fullscreen .resizer {
+            display: none !important;
+        }
+        body.app-fullscreen #center-panel {
+            flex: 1 1 auto;
+            width: 100%;
+        }
+        body.app-fullscreen #viewport {
+            flex: 1 1 auto;
+        }
+        body.app-fullscreen #viewport canvas {
+            width: 100%;
+            height: 100%;
+            aspect-ratio: auto;
+        }
+        #info { margin-bottom: 20px; font-size: 0.9em; line-height: 1.4; border-bottom: 1px solid #ddd; padding-bottom: 10px; }
+        .control-group { margin-bottom: 15px; padding: 0 20px; }
+        .camera-view-shortcut-group { display: flex; flex-direction: column; gap: 8px; min-width: 100px; }
+        .camera-view-shortcut-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px;
+            align-items: stretch;
+        }
+        .camera-view-shortcut-grid openmmd-button {
+            display: flex;
+            width: 100%;
+            box-sizing: border-box;
+            min-width: 0;
+            --openmmd-button-white-space: normal;
+            --openmmd-button-overflow-wrap: anywhere;
+            --openmmd-button-word-break: break-word;
+            --openmmd-button-padding: 6px 8px;
+            line-height: 1.2;
+            text-align: center;
+        }
+        .shortcut-grid-settings {
+            flex: 1 1 0;
+            min-width: 250px;
+        }
+        .shortcut-grid-setting-row {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-left: 20px;
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+        .shortcut-grid-setting-row > label {
+            flex: 0 0 8.5em;
+            min-width: 8.5em;
+            white-space: nowrap;
+        }
+        .shortcut-grid-setting-row > openmmd-range-number-control.control-inline-pair {
+            flex: 1 1 0;
+            width: auto;
+            min-width: 0;
+            --openmmd-range-number-width: 100%;
+        }
+        .camera-control-group { display: flex; flex-direction: column; gap: 8px; }
+        .camera-field { display: flex; flex-direction: column; gap: 4px; }
+        .camera-input-row { display: flex; align-items: center; gap: 6px; }
+        .camera-input-row input[type="range"] { flex: 1 1 auto; min-width: 0; }
+        .camera-input-row input[type="number"] { width: 76px; flex: 0 0 auto; box-sizing: border-box; }
+        .camera-select-row { display: flex; align-items: center; gap: 6px; }
+        .camera-select-row select { flex: 1 1 auto; min-width: 0; }
+        .camera-key-icon {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            filter: invert(27%) sepia(90%) saturate(6738%) hue-rotate(358deg) brightness(101%) contrast(117%);
+            object-fit: contain;
+            flex-shrink: 0;
+            display: block;
+        }
+        .camera-key-icon.is-disabled {
+            cursor: default;
+            pointer-events: none;
+            filter: saturate(0) brightness(0.92) contrast(1.05);
+        }
+        .icon-button {
+            width: 30px;
+            height: 30px;
+            padding: 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            box-sizing: border-box;
+        }
+        .icon-button:disabled {
+            cursor: default;
+            opacity: 0.45;
+        }
+        .icon-button img {
+            width: 18px;
+            height: 18px;
+            display: block;
+            object-fit: contain;
+        }
+        .model-list-delete-button {
+            width: var(--model-list-delete-button-size);
+            height: var(--model-list-delete-button-size);
+        }
+        .vmd-save-button {
+            height: var(--vmd-action-button-height);
+            font-size: 0.9em;
+            line-height: 1;
+            white-space: nowrap;
+        }
+        .vmd-save-button:disabled {
+            cursor: default;
+            opacity: 0.45;
+        }
+        .vmd-delete-button {
+            width: var(--vmd-delete-button-size);
+            height: var(--vmd-action-button-height);
+        }
+        .model-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-height: 120px;
+            overflow: auto;
+            box-sizing: border-box;
+        }
+        .model-list-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+        .model-list-row.is-hidden {
+            opacity: 0.58;
+        }
+        .model-list-visibility-button {
+            width: var(--model-list-delete-button-size);
+            height: var(--model-list-delete-button-size);
+        }
+        .model-list-label {
+            flex: 1 1 auto;
+            min-width: 0;
+            padding: 6px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: #f8f8f8;
+            cursor: pointer;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            box-sizing: border-box;
+        }
+        .model-list-row:hover .model-list-label,
+        .model-list-row:focus-within .model-list-label {
+            border-color: var(--primary-color);
+        }
+        .model-list-row.is-active .model-list-label {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+        .delete-confirm-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 2100;
+            background: rgba(8, 10, 16, 0.72);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+        .delete-confirm-dialog {
+            width: min(560px, 100%);
+            background: rgba(255, 255, 255, 0.97);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .delete-confirm-title {
+            font-size: 1.05em;
+            font-weight: bold;
+        }
+        .delete-confirm-message {
+            margin: 0;
+            white-space: pre-wrap;
+            line-height: 1.5;
+            color: #333;
+        }
+        .delete-confirm-list {
+            margin: 0;
+            padding-left: 20px;
+            max-height: 160px;
+            overflow: auto;
+        }
+        .delete-confirm-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+        .animation-export-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 2100;
+            background: rgba(8, 10, 16, 0.72);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+        .animation-export-dialog {
+            width: min(640px, 100%);
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .animation-export-title {
+            font-size: 1.05em;
+            font-weight: bold;
+        }
+        .animation-export-fieldset {
+            margin: 0;
+            border: 1px solid #d9d9d9;
+            border-radius: 12px;
+            padding: 12px 14px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .animation-export-fieldset legend {
+            padding: 0 6px;
+            font-weight: bold;
+        }
+        .animation-export-radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .animation-export-radio {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            font-weight: normal;
+            line-height: 1.4;
+            color: #333;
+        }
+        .animation-export-radio input {
+            margin-top: 3px;
+        }
+        .animation-export-vrma-options {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .animation-export-actions {
+            display: flex;
+            justify-content: flex-end;
+        }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        details { margin-bottom: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        summary { padding: 8px; cursor: pointer; background: #f9f9f9; font-weight: bold; outline: none; }
+        summary:hover { background: #f0f0f0; }
+        .morph-container { padding: 10px; }
+        .morph-item { margin-bottom: 8px; display: flex; flex-direction: row; align-items: center; gap: 5px; }
+        .morph-item label { font-weight: normal; font-size: 0.85em; margin-bottom: 2px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .morph-item input[type="range"] { width: 60%; flex: 0 0 auto; margin: 0; }
+        .bone-info-unified-label {
+            flex: 0 0 9.5em;
+            width: 9.5em;
+            min-width: 9.5em;
+            max-width: 9.5em;
+        }
+        .playback-range-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+        .playback-range-row label {
+            flex: 0 0 auto;
+            margin-bottom: 0;
+        }
+        .playback-range-input {
+            flex: 1 1 0;
+            width: auto;
+            min-width: 0;
+            --openmmd-number-width: 100%;
+        }
+        .playback-range-separator {
+            white-space: nowrap;
+            flex: 0 0 auto;
+        }
+        .bone-info-row {
+            gap: 6px;
+            flex-wrap: nowrap;
+        }
+        .bone-info-row > select {
+            flex: 1 1 0;
+            width: auto;
+            min-width: 0;
+        }
+        .bone-info-row > openmmd-range-number-control.control-inline-pair {
+            flex: 1 1 0;
+            width: auto;
+            min-width: 0;
+            --openmmd-range-number-width: 100%;
+        }
+        .bone-info-row > .bone-info-unified-label {
+            flex: 0 0 9.5em;
+        }
+        .render-setting-row {
+            gap: 5px;
+        }
+        .render-setting-row label {
+            flex: 0 0 50%;
+            width: 50%;
+            min-width: 0;
+            margin-bottom: 0;
+        }
+        .render-setting-row openmmd-range-control {
+            flex: 1 1 auto;
+            width: auto;
+            min-width: 0;
+            --openmmd-range-width: 100%;
+        }
+        .color-temperature-item {
+            display: flex;
+            align-items: center;
+            gap: var(--color-temperature-item-gap);
+        }
+        .color-temperature-item label {
+            flex: 0 0 calc(40% - var(--color-temperature-item-gap));
+            width: calc(40% - var(--color-temperature-item-gap));
+            min-width: 0;
+            margin-bottom: 0;
+        }
+        .color-temperature-control {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 0 0 calc(60% - 2.5px);
+            width: calc(60% - 2.5px);
+            min-width: 0;
+        }
+        .color-temperature-control openmmd-range-number-control {
+            flex: 1 1 auto;
+            min-width: 0;
+            width: 100%;
+            --openmmd-range-number-width: 100%;
+        }
+        .color-temperature-pick-icon {
+            flex: 0 0 16px;
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            object-fit: contain;
+            flex-shrink: 0;
+            filter: invert(27%) sepia(90%) saturate(6738%) hue-rotate(358deg) brightness(101%) contrast(117%);
+        }
+        .color-picker-trigger {
+            flex: 1 1 auto;
+            min-width: 0;
+            height: 24px;
+            border: 1px solid #777;
+            border-radius: 4px;
+            cursor: pointer;
+            padding: 0;
+            background-color: #000;
+            background-blend-mode: normal;
+            box-sizing: border-box;
+        }
+        .color-picker-trigger:focus-visible {
+            outline: 2px solid var(--primary-color);
+            outline-offset: 2px;
+        }
+        .color-picker-strength {
+            flex: 1 1 auto;
+            min-width: 84px;
+            width: auto;
+            box-sizing: border-box;
+            text-align: right;
+        }
+        .color-picker-channel-group {
+            display: flex;
+            flex: 1 1 auto;
+            gap: 4px;
+            min-width: 0;
+        }
+        .color-picker-channel-group[hidden] {
+            display: none !important;
+        }
+        .color-picker-channel-group input[type="number"] {
+            flex: 1 1 0;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+        .depth-focus-item { flex-wrap: wrap; gap: 6px; }
+        .depth-focus-item .depth-focus-axis {
+            font-size: 0.85em;
+            font-weight: normal;
+            min-width: 10px;
+            text-align: center;
+        }
+        .depth-focus-item .depth-focus-input {
+            width: 18%;
+            min-width: 72px;
+            box-sizing: border-box;
+        }
+        .morph-key-icon {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            filter: invert(27%) sepia(90%) saturate(6738%) hue-rotate(358deg) brightness(101%) contrast(117%);
+            object-fit: contain;
+            flex-shrink: 0;
+            display: block;
+        }
+        .morph-key-icon.is-active {
+            outline: 1px solid var(--primary-color);
+            outline-offset: 2px;
+            border-radius: 3px;
+        }
+
+        /* Tab styles */
+        .tab-container { display: flex; flex-wrap: wrap; border-bottom: 1px solid #ccc; margin-top: 10px; }
+        .tab-button { flex: 1 1 110px; padding: 10px; cursor: pointer; background: #eee; border: none; border-bottom: 2px solid transparent; font-weight: bold; }
+        .tab-button.active { background: #fff; border-bottom: 2px solid var(--primary-color); }
+        .tab-content { display: none; padding: 10px 0px; overflow-x: auto; }
+        .tab-content.active { display: block; }
+        .animation-mapping-grid { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) minmax(360px, 2fr); gap: 8px 12px; align-items: start; }
+        .animation-mapping-header { font-weight: bold; padding-bottom: 4px; border-bottom: 1px solid #ddd; }
+        .animation-mapping-source, .animation-mapping-target, .animation-mapping-offsets { min-width: 0; }
+        .animation-mapping-select { width: 100%; box-sizing: border-box; }
+        .animation-mapping-bulk-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+        .animation-mapping-bulk-label { font-weight: bold; color: #666; }
+        .animation-mapping-bulk-button { padding: 4px 10px; }
+        .animation-mapping-offsets { display: grid; gap: 6px; }
+        .animation-mapping-offset-row { display: grid; grid-template-columns: 20px repeat(3, minmax(0, 1fr)); gap: 6px; align-items: center; }
+        .animation-mapping-offset-row input[type="number"] { width: 100%; box-sizing: border-box; }
+        .animation-mapping-offset-label { font-weight: bold; text-align: center; }
+        .animation-mapping-flip-toggle { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 28px; }
+        .animation-mapping-flip-toggle input[type="checkbox"] { margin: 0; }
+        .animation-mapping-empty { color: #666; padding: 8px 0; }
+        .animation-mapping-status { margin-bottom: 10px; color: #666; }
+        .bgm-drop-zone {
+            border: 2px dashed #ccc;
+            padding: 16px;
+            text-align: center;
+            margin-bottom: 10px;
+            cursor: pointer;
+            background: #fafafa;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .bgm-drop-zone.is-dragover {
+            border-color: var(--primary-color);
+            background: rgba(0, 0, 0, 0.03);
+        }
+        .bgm-drop-zone-hint {
+            font-size: 0.82em;
+            color: #666;
+        }
+        .bgm-file-name {
+            margin: 0 0 6px;
+            font-size: 0.9em;
+            word-break: break-all;
+        }
+        .bgm-status {
+            margin: 0 0 10px;
+            font-size: 0.85em;
+            color: #555;
+        }
+        .bgm-candidate-area {
+            margin: 6px 0 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fcfcfc;
+        }
+        .bgm-candidate-header {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        .bgm-candidate-count {
+            color: #666;
+            font-weight: normal;
+        }
+        .bgm-candidate-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .bgm-candidate-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+            line-height: 1.3;
+            word-break: break-all;
+        }
+        .model-candidate-area {
+            margin: 6px 0 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fcfcfc;
+        }
+        .model-candidate-header {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        .model-candidate-count {
+            color: #666;
+            font-weight: normal;
+        }
+        .model-candidate-actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .model-candidate-load-button {
+            width: 100%;
+            padding: 8px 10px;
+            cursor: pointer;
+        }
+        .model-candidate-list {
+            display: flex;
+            flex-direction: column;
+            padding-top: 10px;
+            gap: 6px;
+        }
+        .model-candidate-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+            line-height: 1.3;
+            word-break: break-all;
+        }
+        .environment-hdr-candidate-area {
+            margin: 6px 0 10px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fcfcfc;
+        }
+        .environment-hdr-candidate-header {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            margin-bottom: 8px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+        .environment-hdr-candidate-count {
+            color: #666;
+            font-weight: normal;
+        }
+        .environment-hdr-candidate-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .environment-hdr-candidate-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+            line-height: 1.3;
+            word-break: break-all;
+        }
+        .material-toolbar {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .material-toolbar button {
+            flex: 1;
+            padding: 5px;
+            cursor: pointer;
+        }
+        .model-json-toolbar {
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .model-json-toolbar button {
+            flex: 1;
+            padding: 5px;
+            cursor: pointer;
+        }
+        .material-shader-row {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .material-shader-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .material-shader-controls select {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+        .material-shader-reload {
+            width: 30px;
+            height: 30px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+            flex: 0 0 auto;
+        }
+        .material-shader-reload:disabled {
+            cursor: default;
+            opacity: 0.55;
+        }
+        .material-shader-reload img {
+            width: 18px;
+            height: 18px;
+            display: block;
+            object-fit: contain;
+        }
+        .material-list {
+            width: 100%;
+            min-height: 220px;
+            max-height: 320px;
+            overflow: auto;
+            box-sizing: border-box;
+        }
+        .material-selection-summary {
+            color: #777;
+            font-size: 0.9em;
+            padding: 4px 0;
+        }
+        .material-controls {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 6px 10px;
+        }
+        .material-control {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 0;
+        }
+        .material-control label {
+            font-weight: normal;
+            margin-bottom: 0;
+            white-space: nowrap;
+        }
+        .material-control input[type="checkbox"] {
+            margin: 0;
+        }
+        .material-pbr-controls {
+            --material-pbr-label-width: 141.59px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .material-pbr-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+            flex-wrap: wrap;
+        }
+        .material-pbr-row label {
+            flex: 0 0 var(--material-pbr-label-width);
+            margin-bottom: 0;
+            font-weight: normal;
+            white-space: nowrap;
+        }
+        .material-pbr-row input[type="range"] {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+        .material-pbr-number {
+            width: 96px;
+            box-sizing: border-box;
+            text-align: right;
+        }
+        .texture-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .texture-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .texture-card {
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 6px;
+            padding: 8px;
+            border: 1px solid #d0d0d0;
+            border-radius: 10px;
+            background: #fff;
+            color: inherit;
+            cursor: pointer;
+            box-sizing: border-box;
+            text-align: left;
+            min-width: 0;
+        }
+        .texture-card.is-selected {
+            border-color: #1d6fff;
+            box-shadow: inset 0 0 0 1px #1d6fff;
+            background: #eef5ff;
+        }
+        .texture-preview {
+            aspect-ratio: 1 / 1;
+            width: 100%;
+            border-radius: 8px;
+            overflow: hidden;
+            background: linear-gradient(135deg, #dadde3 0%, #f7f8fa 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #5e6470;
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            box-sizing: border-box;
+        }
+        .texture-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .texture-preview--placeholder {
+            border: 1px dashed rgba(0, 0, 0, 0.18);
+        }
+        .texture-name {
+            font-size: 0.82rem;
+            line-height: 1.25;
+            word-break: break-word;
+            min-height: 2.5em;
+        }
+        .texture-conversion-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .texture-conversion-row label {
+            flex: 0 0 auto;
+            margin-bottom: 0;
+            font-weight: normal;
+        }
+        .texture-conversion-row select {
+            flex: 1 1 auto;
+            min-width: 0;
+        }
+        .material-pbr-row--compact {
+            display: grid;
+            grid-template-columns: var(--material-pbr-label-width) minmax(0, 1fr) 96px;
+            align-items: center;
+        }
+        .material-pbr-row--range-number {
+            grid-template-columns: var(--material-pbr-label-width) minmax(0, 1fr);
+        }
+        .material-pbr-row--compact label {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .material-pbr-row--compact input[type="range"] {
+            min-width: 0;
+            width: 100%;
+        }
+        .material-pbr-row--compact .material-pbr-number {
+            min-width: 0;
+            width: 100%;
+        }
+        .material-pbr-row--compact openmmd-range-number-control {
+            display: block;
+            min-width: 0;
+            width: 100%;
+        }
+        .material-pbr-swatch {
+            flex: 1 1 auto;
+            min-width: 0;
+            height: 28px;
+        }
+        .material-toon-swatch {
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            align-items: stretch;
+            justify-content: stretch;
+            aspect-ratio: 1 / 1;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(227, 234, 244, 0.96));
+        }
+        .material-toon-swatch img,
+        .material-emissive-swatch img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .material-toon-swatch--mixed,
+        .material-emissive-swatch--mixed {
+            background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.18) 25%, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.04) 50%, rgba(255, 255, 255, 0.18) 50%, rgba(255, 255, 255, 0.18) 75%, rgba(255, 255, 255, 0.04) 75%, rgba(255, 255, 255, 0.04) 100%);
+            background-size: 12px 12px;
+            color: rgba(15, 23, 42, 0.8);
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-align: center;
+        }
+        .material-pbr-color-row--emissive {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .material-pbr-color-row--emissive .material-pbr-swatch {
+            flex: 0 0 41px;
+            width: 41px;
+            min-width: 41px;
+        }
+        .material-pbr-color-row--emissive .material-emissive-source-select {
+            flex: 0 0 62px;
+            width: 62px;
+            min-width: 0;
+            box-sizing: border-box;
+        }
+        .material-pbr-row.is-mixed .color-picker-trigger {
+            background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.18) 25%, rgba(255, 255, 255, 0.04) 25%, rgba(255, 255, 255, 0.04) 50%, rgba(255, 255, 255, 0.18) 50%, rgba(255, 255, 255, 0.18) 75%, rgba(255, 255, 255, 0.04) 75%, rgba(255, 255, 255, 0.04) 100%);
+            background-size: 12px 12px;
+        }
+        .toon-picker-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 2200;
+            background: rgba(8, 10, 16, 0.72);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+        .toon-picker-dialog {
+            width: min(900px, 100%);
+            max-height: min(82vh, 780px);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding: 18px;
+            box-sizing: border-box;
+            border-radius: 16px;
+            border: 1px solid rgba(148, 163, 184, 0.28);
+            background: linear-gradient(180deg, rgba(245, 248, 252, 0.99), rgba(237, 242, 248, 0.98));
+            color: #0f172a;
+            box-shadow: 0 24px 80px rgba(15, 23, 42, 0.35);
+            outline: none;
+        }
+        .toon-picker-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+        .toon-picker-title {
+            font-size: 1.02rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        .toon-picker-close {
+            border: 1px solid rgba(15, 23, 42, 0.15);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.96);
+            color: #0f172a;
+            padding: 8px 14px;
+            cursor: pointer;
+        }
+        .toon-picker-close:hover {
+            border-color: rgba(29, 111, 255, 0.6);
+        }
+        .toon-picker-empty-state {
+            color: #64748b;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+        .toon-picker-grid {
+            max-height: min(68vh, 680px);
+            overflow: auto;
+            margin-bottom: 0;
+            padding-right: 2px;
+        }
+        .toon-picker-group-label {
+            grid-column: 1 / -1;
+            margin: 8px 0 -2px;
+            font-size: 0.76rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #64748b;
+        }
+        .color-picker-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+            background: transparent;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        .color-picker-dialog {
+            width: min(720px, 100%);
+            max-height: min(90vh, 860px);
+            overflow: auto;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 16px;
+            background: linear-gradient(180deg, #23262d 0%, #171a20 100%);
+            color: #f3f4f7;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+            padding: 18px;
+            box-sizing: border-box;
+            outline: none;
+        }
+        .color-picker-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+        .color-picker-title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+        .color-picker-preview {
+            width: 56px;
+            height: 24px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            box-sizing: border-box;
+        }
+        .color-picker-body {
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) 30px minmax(250px, 1fr);
+            gap: 16px;
+            align-items: start;
+        }
+        .color-picker-body.is-temperature-mode {
+            grid-template-columns: minmax(250px, 1fr);
+        }
+        .color-picker-wheel {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            border-radius: 50%;
+            display: block;
+            background: #101215;
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+            touch-action: none;
+        }
+        .color-picker-wheel[hidden],
+        .color-picker-value-slider[hidden] {
+            display: none;
+        }
+        .color-picker-value-slider {
+            width: 30px;
+            height: 100%;
+            min-height: 220px;
+            margin: 0;
+            writing-mode: vertical-lr;
+            direction: rtl;
+            accent-color: var(--primary-color);
+        }
+        .color-picker-temperature-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            direction: ltr;
+            unicode-bidi: isolate;
+        }
+        .color-picker-temperature-row label {
+            flex: 0 0 72px;
+            margin: 0;
+            font-size: 0.85em;
+            color: rgba(255, 255, 255, 0.86);
+            display: flex;
+            align-items: center;
+            min-height: 34px;
+        }
+        .color-picker-temperature-row input[type="range"] {
+            flex: 1 1 auto;
+            min-width: 0;
+            direction: ltr;
+            transform: scaleX(-1);
+            transform-origin: center;
+        }
+        .color-picker-temperature-row input[type="number"] {
+            width: 96px;
+            flex: 0 0 96px;
+            text-align: right;
+        }
+        .color-picker-mode-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .color-picker-mode-row button {
+            flex: 1 1 0;
+            padding: 6px 10px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.08);
+            color: #f2f3f7;
+            cursor: pointer;
+        }
+        .color-picker-mode-row button.is-active {
+            background: #4975db;
+            border-color: #6d91f0;
+            color: #fff;
+        }
+        .color-picker-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .color-picker-channel-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .color-picker-channel-group label {
+            flex: 0 0 72px;
+            margin: 0;
+            font-size: 0.85em;
+            color: rgba(255, 255, 255, 0.86);
+            display: flex;
+            align-items: center;
+            min-height: 34px;
+        }
+        .color-picker-channel-group input[type="number"],
+        .color-picker-channel-group input[type="text"] {
+            flex: 1 1 auto;
+            min-width: 0;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.06);
+            color: #f3f4f7;
+            padding: 6px 8px;
+            box-sizing: border-box;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .color-picker-value-input {
+            flex: 1 1 auto;
+            min-width: 0;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.06);
+            color: #f3f4f7;
+            padding: 6px 8px;
+            box-sizing: border-box;
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .color-picker-channel-group input[type="number"]::-webkit-outer-spin-button,
+        .color-picker-channel-group input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .color-picker-hex-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .color-picker-hex-row label {
+            flex: 0 0 72px;
+            margin: 0;
+            font-size: 0.85em;
+            color: rgba(255, 255, 255, 0.86);
+            display: flex;
+            align-items: center;
+            min-height: 34px;
+        }
+        .color-picker-eyedropper {
+            width: 29px;
+            height: 29px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.06);
+            color: #f3f4f7;
+            cursor: pointer;
+            flex: 0 0 auto;
+            padding: 0;
+            margin-left: 0;
+        }
+        .color-picker-eyedropper img {
+            width: 18px;
+            height: 18px;
+            display: block;
+            object-fit: contain;
+            margin: 0 auto;
+            filter: brightness(0) invert(1);
+        }
+        .color-picker-strength-row {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .color-picker-strength-row label {
+            flex: 0 0 72px;
+            margin: 0;
+            font-size: 0.85em;
+        }
+        #animation-panel { padding: 20px; flex: 0 0 auto; }
+        #timeline-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-top: 1px solid #ccc;
+            background: #f8f8f8;
+            min-height: 200px;
+            overflow: hidden;
+        }
+        #timeline-toolbar {
+            height: 30px;
+            background: #eee;
+            border-bottom: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 10px;
+            font-size: 12px;
+            gap: 10px;
+            position: relative;
+        }
+        .timeline-toolbar-delete-button {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            --openmmd-icon-button-size: 24px;
+            --openmmd-button-padding: 2px;
+            --openmmd-button-border-color: transparent;
+            --openmmd-button-background: transparent;
+            --openmmd-button-icon-size: 20px;
+        }
+        .timeline-toolbar-delete-button img {
+            width: 20px;
+            height: 20px;
+        }
+        #timeline-root {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            grid-template-rows: 30px 1fr;
+            border-bottom: 1px solid #bbb;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        #timeline-corner {
+            grid-column: 1;
+            grid-row: 1;
+            background: #ddd;
+            border-right: 1px solid #bbb;
+            border-bottom: 1px solid #bbb;
+        }
+        #timeline-header {
+            grid-column: 2;
+            grid-row: 1;
+            background: #eee;
+            border-bottom: 1px solid #bbb;
+            overflow: hidden;
+            position: relative;
+        }
+        #timeline-track-list {
+            grid-column: 1;
+            grid-row: 2;
+            background: #f0f0f0;
+            border-right: 1px solid #bbb;
+            overflow-y: hidden;
+        }
+        #timeline-scroll {
+            grid-column: 2;
+            grid-row: 2;
+            overflow: auto;
+            position: relative;
+        }
+        #timeline-range-selection-overlay {
+            position: absolute;
+            display: none;
+            box-sizing: border-box;
+            border: 1px dashed rgba(50, 120, 255, 0.98);
+            background: rgba(50, 120, 255, 0.10);
+            pointer-events: none;
+            z-index: 2;
+        }
+        #timeline-canvas {
+            display: block;
+            background: #fff;
+            width: auto;
+            height: auto;
+            aspect-ratio: auto;
+            box-shadow: none;
+        }
+        #timeline-header-canvas {
+            display: block;
+            width: auto;
+            height: auto;
+            aspect-ratio: auto;
+            box-shadow: none;
+        }
+        .timeline-track-name {
+            box-sizing: border-box;
+            height: 24px;
+            line-height: 23px; /* Subtract 1px border for vertical centering if needed */
+            padding: 0 5px;
+            font-size: 11px;
+            border-bottom: 1px solid #ddd;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .timeline-track-name:hover {
+            background: #e0e0e0;
+        }
+        .timeline-track-name.selected {
+            background: #c0d0ff;
+        }
+        .timeline-track-category {
+            background: #e0e0e0;
+            font-weight: bold;
+        }
+        .timeline-track-group {
+            font-weight: bold;
+        }
+        .timeline-track-child {
+            padding-left: 18px;
+        }
+        .timeline-track-toggle {
+            flex: 0 0 12px;
+            width: 12px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .timeline-track-toggle-empty {
+            visibility: hidden;
+        }
+        .timeline-track-label {
+            min-width: 0;
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="left-sidebar">
+        <section id="timeline-panel">
+            <div id="timeline-root">
+                <div id="timeline-corner"></div>
+                <div id="timeline-header">
+                    <div id="timeline-header-spacer" style="position: relative; height: 100%;">
+                        <canvas id="timeline-header-canvas" style="position: sticky; left: 0; top: 0;"></canvas>
+                    </div>
+                </div>
+                <div id="timeline-track-list"></div>
+                <div id="timeline-scroll">
+                    <div id="timeline-spacer" style="position: relative;">
+                        <canvas id="timeline-canvas" style="position: sticky; left: 0; top: 0;"></canvas>
+                    </div>
+                    <div id="timeline-range-selection-overlay" aria-hidden="true"></div>
+                </div>
+            </div>
+            <div id="timeline-toolbar">
+                <openmmd-button id="timeline-zoom-out" variant="icon" title="ズームアウト"><img src="fonts/zoom_out_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt=""></openmmd-button>
+                <span id="timeline-frame-indicator">Frame: 0</span>
+                <openmmd-button id="timeline-zoom-in" variant="icon" title="ズームイン"><img src="fonts/zoom_in_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt=""></openmmd-button>
+                <openmmd-button id="timeline-delete-key" class="timeline-toolbar-delete-button" variant="icon" title="キーを削除" aria-label="キーを削除">
+                    <img src="fonts/delete_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                </openmmd-button>
+            </div>        </section>
+        <section id="animation-panel">
+            <div id="interpolation-editor">
+                <label data-i18n="Interpolation">補間曲線</label>
+                <div style="display: flex; gap: 10px; align-items: flex-start;">
+                    <div style="position: relative; background: #fff; border: 1px solid #ccc; width: 128px; height: 128px;">
+                        <canvas id="interpolation-canvas" width="128" height="128" style="width: 100%; height: 100%; cursor: crosshair;"></canvas>
+                    </div>
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
+                        <select id="interpolation-target" style="width: 100%; font-size: 0.8em; text-align: center;">
+                            <option value="0" data-i18n="X Translation">X移動</option>
+                            <option value="1" data-i18n="Y Translation">Y移動</option>
+                            <option value="2" data-i18n="Z Translation">Z移動</option>
+                            <option value="3" data-i18n="Rotation">回転</option>
+                            <option value="4" data-i18n="All">すべて</option>
+                        </select>
+                        <!--<button id="interpolation-auto" data-i18n="Auto" style="font-size: 0.8em; padding: 2px;">自動設定</button>-->
+                        <openmmd-button id="interpolation-copy" variant="text-small" data-i18n="Copy">コピー</openmmd-button>
+                        <openmmd-button id="interpolation-paste" variant="text-small" data-i18n="Paste">ペースト</openmmd-button>
+                        <openmmd-button id="interpolation-linear" variant="text-small" data-i18n="Linear">線形補間</openmmd-button>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 10px; margin-top: 20px;">
+                <label id="label-loaded-vmds" data-i18n="Loaded Animations" style="font-size: 0.9em; font-weight: bold; white-space: nowrap; line-height: 1; margin: 0;">Loaded Animations</label>
+                <select id="vmd-list" style="flex: 1; min-width: 0; font-size: 0.9em; padding: 2px; line-height: 1; margin: 0;"></select>
+                <openmmd-button id="save-vmd" class="vmd-save-button" data-i18n="Save VMD" style="margin: 0;">保存</openmmd-button>
+                <openmmd-button id="delete-vmd" class="icon-button vmd-delete-button" variant="icon" title="Delete VMD" aria-label="Delete VMD">
+                    <img src="fonts/delete_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                </openmmd-button>
+            </div>
+            <div style="display: flex; gap: 2px; margin-top: 20px;">
+                <openmmd-button id="rewind-vmd" variant="toolbar" title="最初に戻る"><img src="fonts/first_page_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt=""></openmmd-button>
+                <openmmd-button id="prev-key-vmd" variant="toolbar" title="前のキーフレームへ移動"><img src="fonts/keyboard_double_arrow_left_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt=""></openmmd-button>
+                <openmmd-button id="step-back-vmd" variant="toolbar" title="1フレーム戻る"><img src="fonts/chevron_backward_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt=""></openmmd-button>
+                <openmmd-button id="play-vmd" variant="toolbar"><img src="fonts/play_pause_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt=""></openmmd-button>
+                <openmmd-button id="step-forward-vmd" variant="toolbar" title="1フレーム進む"><img src="fonts/chevron_forward_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt=""></openmmd-button>
+                <openmmd-button id="next-key-vmd" variant="toolbar" title="次のキーフレームへ移動"><img src="fonts/keyboard_double_arrow_right_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt=""></openmmd-button>
+                <openmmd-button id="go-to-end-vmd" variant="toolbar" title="最後へ移動"><img src="fonts/last_page_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt=""></openmmd-button>
+            </div>
+            <div class="playback-range-row">
+                <label for="playback-range-start" data-i18n="Playback Range" style="font-size: 0.9em; font-weight: bold; white-space: nowrap;">Playback Range</label>
+                <openmmd-number-control id="playback-range-start" min="0" step="1" value="0" class="playback-range-input"></openmmd-number-control>
+                <span class="playback-range-separator">〜</span>
+                <openmmd-number-control id="playback-range-end" min="0" step="1" placeholder="Unset" class="playback-range-input"></openmmd-number-control>
+            </div>
+        </section>    </div>
+    <div class="resizer" id="resizer"></div>
+    <div id="center-panel">
+        <div id="viewport">
+            <canvas width="1280" height="720"></canvas>
+            <div id="camera-range-zoom-overlay" aria-hidden="true"></div>
+            <div id="bone-box-selection-overlay" aria-hidden="true"></div>
+        </div>
+        <div id="shortcut-panel">
+            <div class="control-group shortcut-grid-settings">
+                <label id="label-display" data-i18n="Display">Display</label>
+                <div class="morph-item">
+                    <label for="display-preset-selector" data-i18n="Display Preset" style="width:50%">Preset</label>
+                    <select id="display-preset-selector" style="width:30%; text-align:right;">
+                        <option value="sdr">SDR</option>
+                        <option value="hdr" selected>HDR</option>
+                    </select>
+                </div>
+                <div><input type="checkbox" id="useWorldCoordinate"> <label for="useWorldCoordinate" id="label-use-world-coordinate" data-i18n="Use World Coordinate" style="display:inline; font-weight:normal;">Use World Coordinate</label></div>
+                <div><input type="checkbox" id="showBones" checked> <label for="showBones" id="label-show-bones" data-i18n="Show Bones" style="display:inline; font-weight:normal;">Show Bones</label></div>
+                <div><input type="checkbox" id="showBoneAxes"> <label for="showBoneAxes" id="label-show-bone-axes" data-i18n="Axis" style="display:inline; font-weight:normal;">Axis</label></div>
+                <div style="display: flex; align-items: center; gap: 5px; margin-left: 20px;">
+                    <label for="boneThickness" id="label-bone-thickness" data-i18n="Bone Thickness" style="display:inline; font-weight:normal; font-size: 0.8em;">Thickness</label>
+                    <openmmd-range-control id="boneThickness" min="1" max="10" step="1" value="3" style="width: 60px;"></openmmd-range-control>
+                </div>
+                <div><input type="checkbox" id="showPhysics"> <label for="showPhysics" id="label-show-physics" data-i18n="Show Physics" style="display:inline; font-weight:normal;">Show Physics</label></div>
+                <div><input type="checkbox" id="hideIkBones"> <label for="hideIkBones" id="label-hide-ik-bones" data-i18n="Hide IK Bones" style="display:inline; font-weight:normal;">Hide IK Bones</label></div>
+                <div><input type="checkbox" id="hideSpringBones"> <label for="hideSpringBones" id="label-hide-spring-bones" data-i18n="Hide SpringBone Bones" style="display:inline; font-weight:normal;">Hide SpringBone Bones</label></div>
+                <div style="margin-top: 8px; margin-bottom: 4px; font-weight: bold;" data-i18n="Grid">Grid</div>
+                <div><input type="checkbox" id="showGridXZ" checked> <label for="showGridXZ" id="label-show-grid-xz" data-i18n="XZ Plane" style="display:inline; font-weight:normal;">XZ Plane</label></div>
+                <div><input type="checkbox" id="showGridXY"> <label for="showGridXY" id="label-show-grid-xy" data-i18n="XY Plane" style="display:inline; font-weight:normal;">XY Plane</label></div>
+                <div><input type="checkbox" id="showGridYZ"> <label for="showGridYZ" id="label-show-grid-yz" data-i18n="YZ Plane" style="display:inline; font-weight:normal;">YZ Plane</label></div>
+                <div class="shortcut-grid-setting-row">
+                    <label for="gridSizeRange" id="label-grid-size" data-i18n="Grid Size" style="display:inline; font-weight:normal; font-size: 0.8em;">Grid Size</label>
+                    <openmmd-range-number-control id="gridSizeRange" min="0.1" max="10" step="0.1" value="0.5" class="control-inline-pair control-inline-pair--compact"></openmmd-range-number-control>
+                </div>
+                <div class="shortcut-grid-setting-row">
+                    <label for="gridCountRange" id="label-grid-count" data-i18n="Grid Count" style="display:inline; font-weight:normal; font-size: 0.8em;">Grid Count</label>
+                    <openmmd-range-number-control id="gridCountRange" min="1" max="100" step="1" value="10" class="control-inline-pair control-inline-pair--compact"></openmmd-range-number-control>
+                </div>
+                <div class="shortcut-grid-setting-row">
+                    <label for="gridThicknessRange" id="label-grid-thickness" data-i18n="Grid Thickness" style="display:inline; font-weight:normal; font-size: 0.8em;">Thickness</label>
+                    <openmmd-range-number-control id="gridThicknessRange" min="0.1" max="10" step="0.1" value="2" class="control-inline-pair control-inline-pair--compact"></openmmd-range-number-control>
+                </div>
+            </div>
+            <div class="control-group camera-view-shortcut-group">
+                <label id="label-camera-view" data-i18n="Viewpoint">視点</label>
+                <div class="camera-view-shortcut-grid">
+                    <openmmd-button id="camera-view-front" data-i18n="Front">正面</openmmd-button>
+                    <openmmd-button id="camera-view-back" data-i18n="Back">背面</openmmd-button>
+                    <openmmd-button id="camera-view-left" data-i18n="Left">左面</openmmd-button>
+                    <openmmd-button id="camera-view-right" data-i18n="Right">右面</openmmd-button>
+                    <openmmd-button id="camera-view-top" data-i18n="Top">上面</openmmd-button>
+                    <openmmd-button id="camera-view-reset" data-i18n="Reset">リセット</openmmd-button>
+                </div>
+            </div>
+            <div class="control-group">
+                <label id="label-selected-bone" data-i18n="Selected Bone">Selected Bone</label>
+                <div id="selectedBoneName">None</div>
+                <div style="display: flex; gap: 5px; margin-top: 10px;">
+                    <openmmd-button id="shortcut-reset-bone-pos" data-i18n="Reset Translation" style="flex: 1;">Reset Translation</openmmd-button>
+                    <openmmd-button id="shortcut-reset-bone-rot" data-i18n="Reset Rotation" style="flex: 1;">Reset Rotation</openmmd-button>
+                </div>
+                <label id="label-rigidbody" data-i18n="Selected Rigidbody">Selected Rigidbody</label>
+                <div id="selected-rigidbody">None</div>
+            </div>
+            <div class="control-group">
+                <label id="label-reset-rigidbody" data-i18n="Physics">物理</label>
+                <openmmd-button id="reset-rigidbody" data-i18n="Rebuild Rigidbody" style="margin-bottom: 10px;">Rebuild Rigidbody</openmmd-button>
+                <div><input type="checkbox" id="disablePhysics"> <label for="disablePhysics" id="label-disable-physics" data-i18n="Disable Physics" style="display:inline; font-weight:normal;">物理を無効化</label></div>
+            </div>
+            <div class="control-group">
+                <label id="label-fullscreen" data-i18n="Fullscreen">Fullscreen</label>
+                <openmmd-button id="fullscreen-button" data-i18n="Fullscreen" data-full-width="true">Fullscreen</openmmd-button>
+                <label id="label-language" data-i18n="Language">Language</label>
+                <select id="lang-selector">
+                    <option value="ja">日本語</option>
+                    <option value="en">English</option>
+                </select>
+                <openmmd-button id="ui-settings-save" data-i18n="Save UI Settings" data-full-width="true" style="margin-top: 8px;">UI設定を保存</openmmd-button>
+            </div>
+        </div>
+    </div>
+    <div class="resizer" id="sidebar-resizer"></div>
+    <div id="sidebar">
+        <div id="drop-zone" data-i18n="Either drop a model, VMD, HDR, WGSL, UI JSON, or model JSON file here." style="border: 2px dashed #ccc; padding: 20px; text-align: center; margin-bottom: 20px; cursor: pointer;">
+            Either drop a model, VMD, HDR, WGSL, UI JSON, or model JSON file here.
+        </div>
+        <div id="model-candidate-area" class="model-candidate-area" hidden>
+            <div class="model-candidate-header">
+                <span id="model-candidate-header" data-i18n="Detected model files">Detected model files</span>
+                <span id="model-candidate-count" class="model-candidate-count"></span>
+            </div>
+            <openmmd-button id="model-candidate-load" class="model-candidate-load-button" data-i18n="Load Selected Models">Load Selected Models</openmmd-button>
+            <div id="model-candidate-list" class="model-candidate-list"></div>
+        </div>
+        <input type="file" id="file-input" accept=".zip,.wgsl,.vmd,.vrma,.vpd,.pmx,.pmd,.glb,.gltf,.vrm,.json" multiple style="display: none;">
+        <div id="info">
+            <label id="label-loaded-models" data-i18n="Loaded Models">Loaded Models</label>
+            <div id="model-list" class="model-list" aria-label="Loaded Models"></div>
+        </div>
+
+            <div>
+                <div class="tab-container">
+                    <button class="tab-button" type="button" data-tab-target="tab-video-export" data-i18n="Video Settings">Video</button>
+                    <button class="tab-button" type="button" data-tab-target="tab-render" data-i18n="Rendering Settings">Rendering</button>
+                    <button class="tab-button" type="button" data-tab-target="tab-post-effect" data-i18n="Post Effects">Post Effects</button>
+                    <button class="tab-button" type="button" data-tab-target="tab-camera" data-i18n="Camera">Camera</button>
+                    <button class="tab-button" type="button" data-tab-target="tab-light" data-i18n="Light">Light</button>
+                    <button class="tab-button active" type="button" data-tab-target="tab-morph" data-i18n="Morphing">Morph</button>
+                    <button class="tab-button" type="button" data-tab-target="tab-bone" data-i18n="Bone Info">Bone Info</button>
+                    <button class="tab-button" type="button" data-tab-target="tab-material" data-i18n="Material">Material</button>
+                    <button class="tab-button" type="button" data-tab-target="tab-texture" data-i18n="Texture">Texture</button>
+                    <button class="tab-button" type="button" data-tab-target="tab-animation-mapping" data-i18n="Animation Mapping">Animation Mapping</button>
+                    <button class="tab-button" type="button" data-tab-target="tab-debug" data-i18n="Debug">Debug</button>
+                </div>
+            
+            <div id="tab-video-export" class="tab-content">
+                <div class="control-group">
+                    <label id="label-bgm" data-i18n="BGM">BGM</label>
+                    <div id="bgm-drop-zone" class="bgm-drop-zone" role="button" tabindex="0" aria-label="BGM file upload">
+                        <div data-i18n="Click or drop a BGM file here.">ここに BGM ファイルをクリックまたはドラッグ＆ドロップしてください。</div>
+                        <div class="bgm-drop-zone-hint" data-i18n="Only browser-playable audio formats are supported.">HTML と JavaScript が標準で再生できる音声形式のみ対応します。</div>
+                    </div>
+                    <input type="file" id="bgm-file-input" accept="audio/*" multiple style="display: none;">
+                    <div id="bgm-file-name" class="bgm-file-name" data-i18n="No BGM loaded.">BGM が読み込まれていません。</div>
+                    <div id="bgm-status" class="bgm-status" data-i18n="No BGM loaded.">BGM が読み込まれていません。</div>
+                    <div id="bgm-candidate-area" class="bgm-candidate-area" hidden>
+                        <div class="bgm-candidate-header">
+                            <span id="bgm-candidate-header" data-i18n="Detected audio files">Detected audio files</span>
+                            <span id="bgm-candidate-count" class="bgm-candidate-count"></span>
+                        </div>
+                        <div id="bgm-candidate-list" class="bgm-candidate-list"></div>
+                    </div>
+                    <div class="morph-item">
+                        <label for="bgm-volume" data-i18n="Volume" style="width:40%">Volume</label>
+                        <openmmd-range-number-control id="bgm-volume" min="0" max="1" step="0.01" value="1" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div>
+                        <input type="checkbox" id="bgm-loop">
+                        <label for="bgm-loop" data-i18n="Loop" style="display:inline; font-weight:normal;">Loop</label>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label id="label-video-export" data-i18n="Video Settings">Video Settings</label>
+                    <openmmd-button id="video-export-save-png-button" data-i18n="Save Current Frame as Image" data-full-width="true" style="margin-bottom: 10px;">現在フレームを画像に保存</openmmd-button>
+                    <div class="morph-item">
+                        <label for="video-export-format" data-i18n="Format" style="width:40%">Format</label>
+                        <select id="video-export-format" style="width:60%;">
+                            <option value="mp4" selected>MP4</option>
+                            <option value="webm">WebM</option>
+                            <option value="mov">MOV</option>
+                            <option value="mkv">MKV</option>
+                        </select>
+                    </div>
+                    <div class="morph-item">
+                        <label for="video-export-codec" data-i18n="Codec" style="width:40%">Codec</label>
+                        <select id="video-export-codec" style="width:60%;"></select>
+                    </div>
+                    <div class="morph-item">
+                        <label for="video-export-quality" data-i18n="Quality" style="width:40%">Quality</label>
+                        <select id="video-export-quality" style="width:60%;"></select>
+                    </div>
+                    <div class="morph-item">
+                        <label for="video-export-width" data-i18n="Width" style="width:40%">Width</label>
+                        <openmmd-number-control id="video-export-width" min="1" step="1" value="1280" class="control-inline-number"></openmmd-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="video-export-height" data-i18n="Height" style="width:40%">Height</label>
+                        <openmmd-number-control id="video-export-height" min="1" step="1" value="720" class="control-inline-number"></openmmd-number-control>
+                    </div>
+                    <div>
+                        <input type="checkbox" id="video-export-include-audio" disabled>
+                        <label for="video-export-include-audio" data-i18n="Export audio" style="display:inline; font-weight:normal;">Export audio</label>
+                    </div>
+                    <div>
+                        <input type="checkbox" id="video-export-transparent-background" disabled>
+                        <label for="video-export-transparent-background" data-i18n="Transparent Background" title="WebM と MKV のみ対応" style="display:inline; font-weight:normal;">Transparent Background</label>
+                    </div>
+                    <div style="margin-top: 8px; font-size: 0.85em; color: #666;" data-i18n="Current playback range will be used.">Current playback range will be used.</div>
+                    <openmmd-button id="video-export-button" data-i18n="Export Video" data-full-width="true" style="margin-top: 10px;">書き出し</openmmd-button>
+                </div>
+            </div>
+            <div id="tab-camera" class="tab-content">
+                <div class="control-group camera-control-group">
+                    <div class="camera-field">
+                        <label for="camera-fov-range" id="label-camera-fov" data-i18n="FOV">FOV</label>
+                        <div class="camera-input-row">
+                            <openmmd-range-number-control id="camera-fov-range" min="1" max="180" step="0.1" class="control-inline-pair control-inline-pair--wide"></openmmd-range-number-control>
+                            <img id="camera-fov-key" class="camera-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" title="Save camera keyframe">
+                        </div>
+                    </div>
+
+                    <label id="bone-follow" data-i18n="Bone Follow">Bone Follow</label>
+                    <div class="camera-field" style="display: flex; flex-direction: row;">
+                        <label for="camera-model-list" id="label-camera-model" data-i18n="Model" style="width: 60%;">Model</label>
+                        <select id="camera-model-list" style="width: 100%;"></select>
+                    </div>
+                    <div class="camera-field" style="display: flex; flex-direction: row;">
+                        <label for="camera-bone-list" id="label-camera-bone" data-i18n="Bone">Bone</label>
+                        <div class="camera-select-row" style="margin-left: auto;">
+                            <select id="camera-bone-list"></select>
+                            <img id="camera-bone-key" class="camera-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" title="Save camera keyframe">
+                        </div>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <style>
+                        .camera-pose-table { width: 100%; border-collapse: collapse; font-size: 0.9em; table-layout: fixed; }
+                        .camera-pose-table th { text-align: left; padding: 4px; }
+                        .camera-pose-table td { padding: 4px; vertical-align: middle; }
+                        .camera-pose-label { width: 25%; text-align: right; font-weight: bold; }
+                        .camera-pose-table input[type="number"] {
+                            width: 100%;
+                            box-sizing: border-box;
+                        }
+                        .camera-pose-key-icon {
+                            width: 16px;
+                            height: 16px;
+                            cursor: pointer;
+                            filter: invert(27%) sepia(90%) saturate(6738%) hue-rotate(358deg) brightness(101%) contrast(117%);
+                            object-fit: contain;
+                            display: block;
+                            margin: 0 auto;
+                        }
+                        .camera-pose-key-icon.is-disabled {
+                            cursor: default;
+                            pointer-events: none;
+                            filter: saturate(0) brightness(0.92) contrast(1.05);
+                        }
+                    </style>
+                    <label id="label-camera-pose" data-i18n="Camera Pose">Camera Pose</label>
+                    <table class="camera-pose-table">
+                        <tr><th colspan="2" id="camera-position-header" data-i18n="Position">位置</th><th style="text-align:center; width: 24px;"><img id="camera-position-key" class="camera-key-icon camera-pose-key-icon camera-state-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" title="Save camera keyframe"></th></tr>
+                        <tr><td class="camera-pose-label">X</td><td><openmmd-number-control id="camera-pos-x" step="0.01" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                        <tr><td class="camera-pose-label">Y</td><td><openmmd-number-control id="camera-pos-y" step="0.01" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                        <tr><td class="camera-pose-label">Z</td><td><openmmd-number-control id="camera-pos-z" step="0.01" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                        <tr><th colspan="2" id="camera-rot-header" data-i18n="Rotation">回転 (deg)</th><th style="text-align:center; width: 24px;"><img id="camera-rotation-key" class="camera-key-icon camera-pose-key-icon camera-state-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" title="Save camera keyframe"></th></tr>
+                        <tr><td class="camera-pose-label">X</td><td><openmmd-number-control id="camera-rot-x" step="0.1" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                        <tr><td class="camera-pose-label">Y</td><td><openmmd-number-control id="camera-rot-y" step="0.1" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                        <tr><td class="camera-pose-label">Z</td><td><openmmd-number-control id="camera-rot-z" step="0.1" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                        <tr><th colspan="2" id="camera-target-header" data-i18n="Target">注視点</th><th style="text-align:center; width: 24px;"><img id="camera-target-key" class="camera-key-icon camera-pose-key-icon camera-state-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" title="Save camera keyframe"></th></tr>
+                        <tr><td class="camera-pose-label">X</td><td><openmmd-number-control id="camera-target-x" step="0.01" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                        <tr><td class="camera-pose-label">Y</td><td><openmmd-number-control id="camera-target-y" step="0.01" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                        <tr><td class="camera-pose-label">Z</td><td><openmmd-number-control id="camera-target-z" step="0.01" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                    </table>
+                </div>
+            </div>
+            <div id="tab-light" class="tab-content">
+                <div class="control-group" id="light-settings">
+                    <label id="label-light-color" data-i18n="Light Color">Light Color</label>
+                    <div class="morph-item">
+                        <label for="light-color-swatch" data-i18n="Color" style="width:50%">Color</label>
+                        <button id="light-color-swatch" type="button" class="color-picker-trigger" aria-label="Light Color"></button>
+                    </div>
+                    <div class="morph-item color-picker-strength-row">
+                        <label for="light-color-strength-range" data-i18n="Intensity" style="width:40%">Intensity</label>
+                        <openmmd-range-number-control id="light-color-strength-range" min="0" max="16" step="0.01" value="1.000" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <style>
+                        .light-table { width: 100%; border-collapse: collapse; font-size: 0.9em; table-layout: fixed; }
+                        .light-table th { text-align: left; padding: 4px; }
+                        #light-pos-header, #light-rot-header { padding-top: 14px; }
+                        .light-table td { padding: 4px; vertical-align: middle; }
+                        .light-label { width: 32px; text-align: right; font-weight: bold; white-space: nowrap; }
+                        .light-table input[type="number"] {
+                            width: 100%;
+                            box-sizing: border-box;
+                        }
+                    </style>
+                    <table class="light-table">
+                        <colgroup>
+                            <col style="width: 32px;">
+                            <col>
+                            <col style="width: 24px;">
+                        </colgroup>
+                        <tr>
+                            <th colspan="2" id="light-pos-header" data-i18n="World Position">World Position</th>
+                            <th></th>
+                        </tr>
+                        <tr><td class="light-label">X</td><td><openmmd-number-control id="light-pos-x" step="0.01" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                        <tr><td class="light-label">Y</td><td><openmmd-number-control id="light-pos-y" step="0.01" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                        <tr><td class="light-label">Z</td><td><openmmd-number-control id="light-pos-z" step="0.01" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                        <tr>
+                            <th colspan="2" id="light-rot-header" data-i18n="World Rotation">World Rotation (deg)</th>
+                            <th style="text-align:center; width: 24px;"><img id="light-rot-key" class="camera-key-icon camera-pose-key-icon light-state-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" title="Save light keyframe"></th>
+                        </tr>
+                        <tr><td class="light-label">X</td><td><openmmd-number-control id="light-rot-x" step="0.1" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                        <tr><td class="light-label">Y</td><td><openmmd-number-control id="light-rot-y" step="0.1" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                        <tr><td class="light-label">Z</td><td><openmmd-number-control id="light-rot-z" step="0.1" class="control-inline-number--table"></openmmd-number-control></td><td></td></tr>
+                    </table>
+                </div>
+            </div>
+            <div id="tab-morph" class="tab-content active">
+                <div class="morph-groups">
+                    <div id="mmd-morph-groups">
+                        <details>
+                            <summary id="summary-eye" data-i18n="Eye">目</summary>
+                            <div id="morph-group-2" class="morph-container" data-morph-register-container="true"></div>
+                        </details>
+                        <details>
+                            <summary id="summary-lips" data-i18n="Lips">リップ</summary>
+                            <div id="morph-group-3" class="morph-container" data-morph-register-container="true"></div>
+                        </details>
+                        <details>
+                            <summary id="summary-brow" data-i18n="Brow">まゆ</summary>
+                            <div id="morph-group-1" class="morph-container" data-morph-register-container="true"></div>
+                        </details>
+                        <details>
+                            <summary id="summary-others" data-i18n="Others">その他</summary>
+                            <div id="morph-group-4" class="morph-container" data-morph-register-container="true"></div>
+                        </details>
+                    </div>
+                    <div id="vrm-morph-groups" hidden>
+                        <details open>
+                            <summary>感情</summary>
+                            <div id="vrm-morph-group-emotion" class="morph-container" data-morph-register-container="true"></div>
+                        </details>
+                        <details>
+                            <summary>リップシンク</summary>
+                            <div id="vrm-morph-group-lip-sync" class="morph-container" data-morph-register-container="true"></div>
+                        </details>
+                        <details>
+                            <summary>瞬き</summary>
+                            <div id="vrm-morph-group-blink" class="morph-container" data-morph-register-container="true"></div>
+                        </details>
+                        <details>
+                            <summary>視線</summary>
+                            <div id="vrm-morph-group-look-at" class="morph-container" data-morph-register-container="true"></div>
+                        </details>
+                        <details>
+                            <summary>その他</summary>
+                            <div id="vrm-morph-group-other" class="morph-container" data-morph-register-container="true"></div>
+                        </details>
+                        <details>
+                            <summary>custom</summary>
+                            <div id="vrm-morph-group-custom" class="morph-container" data-morph-register-container="true"></div>
+                        </details>
+                    </div>
+                </div>
+            </div>
+            <div id="tab-bone" class="tab-content">
+                <style>
+                    .bone-table { width: 100%; border-collapse: collapse; font-size: 0.9em; table-layout: fixed; }
+                    .bone-table th { text-align: left; padding: 4px; }
+                    #bone-pos-header, #bone-rot-header { padding-top: 14px; }
+                    .bone-table td { padding: 4px; vertical-align: middle; }
+                    .bone-icon { width: 42px; padding-left: 0; padding-right: 0; text-align: center; }
+                    .bone-key-header-cell {
+                        width: 48px;
+                        padding: 0;
+                        text-align: center;
+                        vertical-align: middle;
+                    }
+                    .bone-rotation-key-header-cell {
+                        width: 42px;
+                    }
+                    .bone-key-header-button {
+                        width: 16px;
+                        height: 16px;
+                        padding: 0;
+                        border: 0;
+                        background: transparent;
+                        display: block;
+                        margin: 0 auto;
+                        cursor: pointer;
+                        box-sizing: border-box;
+                    }
+                    .bone-key-header-button:disabled {
+                        cursor: default;
+                        pointer-events: none;
+                    }
+                    .bone-label { width: 32px; text-align: right; font-weight: bold; white-space: nowrap; }
+                    .bone-table input[type="number"] {
+                        width: 100%;
+                        box-sizing: border-box;
+                    }
+                    .bone-key-icon {
+                        width: 16px;
+                        height: 16px;
+                        cursor: pointer;
+                        filter: invert(27%) sepia(90%) saturate(6738%) hue-rotate(358deg) brightness(101%) contrast(117%);
+                        object-fit: contain;
+                        display: block;
+                        margin: 0 auto;
+                    }
+                    .bone-key-icon.is-disabled {
+                        cursor: default;
+                        pointer-events: none;
+                        filter: saturate(0) brightness(0.92) contrast(1.05);
+                    }
+                    .bone-rotation-control-group {
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        gap: 2px;
+                    }
+                    .bone-rotation-lock-button {
+                        width: 18px;
+                        height: 18px;
+                        padding: 0;
+                        border: 0;
+                        background: transparent;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        flex: 0 0 auto;
+                        cursor: pointer;
+                    }
+                    .bone-rotation-lock-button:disabled {
+                        cursor: default;
+                        opacity: 0.45;
+                    }
+                    .bone-rotation-lock-placeholder {
+                        visibility: hidden;
+                    }
+                    .bone-rotation-lock-button img {
+                        width: 16px;
+                        height: 16px;
+                        display: block;
+                        object-fit: contain;
+                    }
+                    .bone-rotation-lock-icon {
+                        filter: none;
+                    }
+                    .bone-child-pick-button.is-active {
+                        background: #e6eefc;
+                        border-color: #8ea4da;
+                    }
+                    .bone-parent-summary {
+                        margin-bottom: 10px;
+                        display: flex;
+                        flex-direction: column;
+                        gap: 4px;
+                    }
+                    .bone-parent-summary-value {
+                        font-size: 0.95em;
+                        line-height: 1.3;
+                        word-break: break-word;
+                    }
+                </style>
+                <div class="bone-parent-summary">
+                    <label id="label-bone-parent-name" data-i18n="Parent Bone" style="display:inline; font-weight:bold;">Parent Bone</label>
+                    <div id="bone-parent-bone-name" class="bone-parent-summary-value">None</div>
+                </div>
+                <table class="bone-table">
+                    <colgroup>
+                        <col style="width: 32px;">
+                        <col>
+                        <col style="width: 48px;">
+                    </colgroup>
+                    <tr>
+                        <th colspan="2" id="bone-pos-header" data-i18n="Local Position">Local Position</th>
+                        <th class="bone-key-header-cell bone-rotation-key-header-cell" style="padding-left: 6px;">
+                            <div class="bone-rotation-control-group">
+                                <button class="bone-rotation-lock-button bone-rotation-lock-placeholder" type="button" tabindex="-1" aria-hidden="true" disabled>
+                                    <img class="bone-key-icon bone-rotation-lock-icon" src="fonts/lock_open_right_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                                </button>
+                                <button id="bone-pos-key" class="bone-key-header-button" type="button" title="Save bone keyframe" aria-label="Save bone keyframe">
+                                    <img class="bone-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                                </button>
+                            </div>
+                        </th>
+                    </tr>
+                    <tr>
+                        <td class="bone-label">X</td>
+                        <td><openmmd-number-control id="bone-pos-x" step="0.01" class="control-inline-number--table"></openmmd-number-control></td>
+                        <td class="bone-icon">
+                            <div class="bone-rotation-control-group">
+                                <button class="bone-rotation-lock-button bone-rotation-lock-placeholder" type="button" tabindex="-1" aria-hidden="true" disabled>
+                                    <img class="bone-key-icon bone-rotation-lock-icon" src="fonts/lock_open_right_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                                </button>
+                                <img class="bone-key-icon bone-row-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="bone-label">Y</td>
+                        <td><openmmd-number-control id="bone-pos-y" step="0.01" class="control-inline-number--table"></openmmd-number-control></td>
+                        <td class="bone-icon">
+                            <div class="bone-rotation-control-group">
+                                <button class="bone-rotation-lock-button bone-rotation-lock-placeholder" type="button" tabindex="-1" aria-hidden="true" disabled>
+                                    <img class="bone-key-icon bone-rotation-lock-icon" src="fonts/lock_open_right_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                                </button>
+                                <img class="bone-key-icon bone-row-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="bone-label">Z</td>
+                        <td><openmmd-number-control id="bone-pos-z" step="0.01" class="control-inline-number--table"></openmmd-number-control></td>
+                        <td class="bone-icon">
+                            <div class="bone-rotation-control-group">
+                                <button class="bone-rotation-lock-button bone-rotation-lock-placeholder" type="button" tabindex="-1" aria-hidden="true" disabled>
+                                    <img class="bone-key-icon bone-rotation-lock-icon" src="fonts/lock_open_right_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                                </button>
+                                <img class="bone-key-icon bone-row-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                            </div>
+                        </td>
+                    </tr>
+                    <tr><td colspan="3">
+                        <div style="display: flex; gap: 2px;">
+                            <openmmd-button id="copy-bone-pos" variant="text-small" data-i18n="Copy" style="flex: 1;">Copy</openmmd-button>
+                            <openmmd-button id="paste-bone-pos" variant="text-small" data-i18n="Paste" style="flex: 1;">Paste</openmmd-button>
+                            <openmmd-button id="flip-paste-bone-pos" variant="text-small" data-i18n="Flip Paste" style="flex: 1;">Flip Paste</openmmd-button>
+                        </div>
+                    </td></tr>
+                    <tr>
+                        <th colspan="2" id="bone-rot-header" data-i18n="Local Rotation">Local Rotation (deg)</th>
+                        <th class="bone-key-header-cell bone-rotation-key-header-cell" style="padding-left: 6px;">
+                            <div class="bone-rotation-control-group">
+                                <button class="bone-rotation-lock-button bone-rotation-lock-placeholder" type="button" tabindex="-1" aria-hidden="true" disabled>
+                                    <img class="bone-key-icon bone-rotation-lock-icon" src="fonts/lock_open_right_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                                </button>
+                                <button id="bone-rot-key" class="bone-key-header-button" type="button" title="Save bone keyframe" aria-label="Save bone keyframe">
+                                    <img class="bone-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                                </button>
+                            </div>
+                        </th>
+                    </tr>
+                    <tr>
+                        <td class="bone-label">X</td>
+                        <td><openmmd-number-control id="bone-rot-x" step="0.1" class="control-inline-number--table"></openmmd-number-control></td>
+                        <td class="bone-icon">
+                            <div class="bone-rotation-control-group">
+                                <button id="bone-rot-lock-x" class="bone-rotation-lock-button" type="button" data-bone-rotation-axis="x" title="Lock X rotation" aria-label="Lock X rotation" aria-pressed="false">
+                                    <img class="bone-key-icon bone-rotation-lock-icon" src="fonts/lock_open_right_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                                </button>
+                                <img class="bone-key-icon bone-row-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="bone-label">Y</td>
+                        <td><openmmd-number-control id="bone-rot-y" step="0.1" class="control-inline-number--table"></openmmd-number-control></td>
+                        <td class="bone-icon">
+                            <div class="bone-rotation-control-group">
+                                <button id="bone-rot-lock-y" class="bone-rotation-lock-button" type="button" data-bone-rotation-axis="y" title="Lock Y rotation" aria-label="Lock Y rotation" aria-pressed="false">
+                                    <img class="bone-key-icon bone-rotation-lock-icon" src="fonts/lock_open_right_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                                </button>
+                                <img class="bone-key-icon bone-row-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="bone-label">Z</td>
+                        <td><openmmd-number-control id="bone-rot-z" step="0.1" class="control-inline-number--table"></openmmd-number-control></td>
+                        <td class="bone-icon">
+                            <div class="bone-rotation-control-group">
+                                <button id="bone-rot-lock-z" class="bone-rotation-lock-button" type="button" data-bone-rotation-axis="z" title="Lock Z rotation" aria-label="Lock Z rotation" aria-pressed="false">
+                                    <img class="bone-key-icon bone-rotation-lock-icon" src="fonts/lock_open_right_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                                </button>
+                                <img class="bone-key-icon bone-row-key-icon" src="fonts/radio_button_checked_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                            </div>
+                        </td>
+                    </tr>
+                    <tr><td colspan="3">
+                        <div style="display: flex; gap: 2px;">
+                            <openmmd-button id="copy-bone-rot" variant="text-small" data-i18n="Copy" style="flex: 1;">Copy</openmmd-button>
+                            <openmmd-button id="paste-bone-rot" variant="text-small" data-i18n="Paste" style="flex: 1;">Paste</openmmd-button>
+                            <openmmd-button id="flip-paste-bone-rot" variant="text-small" data-i18n="Flip Paste" style="flex: 1;">Flip Paste</openmmd-button>
+                        </div>
+                    </td></tr>
+                </table>
+                <div style="margin-top: 10px; display: flex; gap: 5px;">
+                    <openmmd-button id="reset-bone-pos" data-i18n="Reset Translation" style="flex: 1;">Reset Translation</openmmd-button>
+                    <openmmd-button id="reset-bone-rot" data-i18n="Reset Rotation" style="flex: 1;">Reset Rotation</openmmd-button>
+                </div>                
+                <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+                    <div><input type="checkbox" id="bone-child-enable"><label for="bone-child-enable" id="label-bone-child-enable" data-i18n="Set Child" style="display:inline; font-weight:normal;">Set Child</label></div>
+                    <div class="morph-item bone-info-row">
+                        <label for="bone-child-model-list" id="label-bone-child-model-list" data-i18n="Child Model" class="bone-info-unified-label">Model</label>
+                        <select id="bone-child-model-list" style="text-align: right;"></select>
+                    </div>
+                    <div class="morph-item bone-info-row">
+                        <label for="bone-child-bone-list" id="label-bone-child-bone-list" data-i18n="Child Bone" class="bone-info-unified-label">Bone</label>
+                        <select id="bone-child-bone-list" style="text-align: right;"></select>
+                        <openmmd-button id="bone-child-pick" class="icon-button bone-child-pick-button" variant="icon" title="Pick Child Bone" aria-label="Pick Child Bone">
+                            <img src="fonts/colorize_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                        </openmmd-button>
+                    </div>
+                    <div class="morph-item bone-info-row">
+                        <label for="bone-child-influence-range" id="label-bone-child-influence" data-i18n="Influence" class="bone-info-unified-label">Influence</label>
+                        <openmmd-range-number-control id="bone-child-influence-range" min="0" max="1" step="0.01" value="1" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <openmmd-button id="bone-child-clear-inverse" data-i18n="Clear Inverse" style="flex: 1;">Clear Inverse</openmmd-button>
+                        <openmmd-button id="bone-child-set-inverse" data-i18n="Set Inverse" style="flex: 1;">Set Inverse</openmmd-button>
+                    </div>
+                </div>
+                <div style="margin-top: 10px; display: flex; flex-direction: column; gap: 6px;">
+                    <div><label id="label-bone-ik" data-i18n="IK" style="display:inline; font-weight:normal;">IK</label></div>
+                    <div><label id="label-bone-ik-rotation-lock" data-i18n="IK Rotation Lock" style="display:inline; font-weight:normal;">IK Rotation Lock</label></div>
+                    <table>
+                        <tr>
+                            <td class="bone-label">X</td>
+                            <td class="bone-icon">
+                                <div class="bone-rotation-control-group">
+                                    <button id="bone-ik-rot-lock-x" class="bone-rotation-lock-button bone-ik-rotation-lock-button" type="button" data-bone-ik-rotation-axis="x" title="Lock IK X rotation" aria-label="Lock IK X rotation" aria-pressed="false">
+                                        <img class="bone-key-icon bone-rotation-lock-icon" src="fonts/lock_open_right_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="bone-label">Y</td>
+                            <td class="bone-icon">
+                                <div class="bone-rotation-control-group">
+                                    <button id="bone-ik-rot-lock-y" class="bone-rotation-lock-button bone-ik-rotation-lock-button" type="button" data-bone-ik-rotation-axis="y" title="Lock IK Y rotation" aria-label="Lock IK Y rotation" aria-pressed="false">
+                                        <img class="bone-key-icon bone-rotation-lock-icon" src="fonts/lock_open_right_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="bone-label">Z</td>
+                            <td class="bone-icon">
+                                <div class="bone-rotation-control-group">
+                                    <button id="bone-ik-rot-lock-z" class="bone-rotation-lock-button bone-ik-rotation-lock-button" type="button" data-bone-ik-rotation-axis="z" title="Lock IK Z rotation" aria-label="Lock IK Z rotation" aria-pressed="false">
+                                        <img class="bone-key-icon bone-rotation-lock-icon" src="fonts/lock_open_right_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+                    <div><input type="checkbox" id="bone-ik-enable"><label for="bone-ik-enable" id="label-bone-ik-enable" data-i18n="Enable IK" style="display:inline; font-weight:normal;">Enabled</label></div>
+                    <div class="morph-item bone-info-row">
+                        <label for="bone-ik-target-bone-list" id="label-bone-ik-target-bone-list" data-i18n="IK Target Bone" class="bone-info-unified-label">Target Bone</label>
+                        <select id="bone-ik-target-bone-list" style="text-align: right;"></select>
+                    </div>
+                    <div class="morph-item bone-info-row">
+                        <label for="bone-ik-chain-count-range" id="label-bone-ik-chain-count" data-i18n="Chain Count" class="bone-info-unified-label">Chain Count</label>
+                        <openmmd-range-number-control id="bone-ik-chain-count-range" min="1" max="10" step="1" value="1" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item bone-info-row">
+                        <label for="bone-ik-iteration-count-range" id="label-bone-ik-iteration-count" data-i18n="Iteration Count" class="bone-info-unified-label">Iteration Count</label>
+                        <openmmd-range-number-control id="bone-ik-iteration-count-range" min="1" max="1000" step="1" value="1" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <openmmd-button id="bone-ik-create" data-i18n="Create IK" style="flex: 1;">IK の設定</openmmd-button>
+                        <openmmd-button id="bone-ik-delete" data-i18n="Delete IK" style="flex: 1;">IK を削除</openmmd-button>
+                    </div>
+                </div>
+                <openmmd-button id="save-vpd" class="vmd-save-button" data-i18n="Save VPD" data-full-width="true" style="margin-top: 10px;" disabled>vpd を保存</openmmd-button>
+            </div>
+            <div id="tab-render" class="tab-content">
+                <div class="control-group" id="shadow-settings">
+                    <label id="label-shadow" data-i18n="Shadow Settings">Shadow</label>
+                    <div class="morph-item render-setting-row">
+                        <label for="shadow-power" data-i18n="shadow power" style="width:40%">Shadow Power</label>
+                        <openmmd-range-number-control id="shadow-power" min="1" max="10" step="0.1" value="1.0" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item render-setting-row">
+                        <label for="shadow-bias" data-i18n="shadow bias">Bias</label>
+                        <openmmd-range-control id="shadow-bias" min="0" max="0.01" step="0.0001" value="0.005"></openmmd-range-control>
+                    </div>
+                    <div class="morph-item render-setting-row">
+                        <label for="shadow-strength" data-i18n="shadow strength">Strength</label>
+                        <openmmd-range-control id="shadow-strength" min="0" max="1" step="0.01" value="1.0"></openmmd-range-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="shadow-map-size" data-i18n="Shadow Map Resolution" style="width:50%;">Shadow Map Resolution</label>
+                        <select id="shadow-map-size" style="width:50%;  text-align: right;">
+                            <option value="1024" selected>1024</option>
+                            <option value="2048">2048</option>
+                            <option value="4096">4096</option>
+                        </select>
+                    </div>
+                    <div class="morph-item">
+                        <label for="shadow-far-auto" data-i18n="Shadow Far Auto" style="width:50%">Far Auto</label>
+                        <input type="checkbox" id="shadow-far-auto" checked>
+                    </div>
+                    <div class="morph-item render-setting-row">
+                        <label for="shadow-far" data-i18n="Shadow Far">Far</label>
+                        <openmmd-range-control id="shadow-far" min="50" max="2000" step="10" value="1000" disabled></openmmd-range-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="ambient-occlusion-enabled" data-i18n="Ambient Occlusion Enabled" style="width:50%">Ambient Occlusion</label>
+                        <input type="checkbox" id="ambient-occlusion-enabled">
+                    </div>
+                    <div class="morph-item">
+                        <label for="ambient-occlusion-radius" data-i18n="Ambient Occlusion Radius" style="width:40%">Radius</label>
+                        <openmmd-range-number-control id="ambient-occlusion-radius" min="0" max="2" step="0.01" value="0.4" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="ambient-occlusion-bias" data-i18n="Ambient Occlusion Bias" style="width:40%">Bias</label>
+                        <openmmd-range-number-control id="ambient-occlusion-bias" min="0" max="0.1" step="0.001" value="0.02" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="ambient-occlusion-intensity" data-i18n="Ambient Occlusion Intensity" style="width:40%">Intensity</label>
+                        <openmmd-range-number-control id="ambient-occlusion-intensity" min="0" max="10" step="0.01" value="1.0" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="ambient-occlusion-blur-amount" data-i18n="Ambient Occlusion Blur Amount" style="width:40%">Blur Amount</label>
+                        <openmmd-range-number-control id="ambient-occlusion-blur-amount" min="0" max="4" step="0.1" value="1.0" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="ambient-occlusion-sample-count" data-i18n="Ambient Occlusion Sample Count" style="width:40%">Sample Count</label>
+                        <openmmd-range-number-control id="ambient-occlusion-sample-count" min="1" max="32" step="1" value="12" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="contact-shadow-enabled" data-i18n="Contact Shadow Enabled" style="width:50%">Contact Shadow</label>
+                        <input type="checkbox" id="contact-shadow-enabled">
+                    </div>
+                    <div class="morph-item">
+                        <label for="contact-shadow-length" data-i18n="Contact Shadow Length" style="width:40%">Length</label>
+                        <openmmd-range-number-control id="contact-shadow-length" min="0" max="1" step="0.001" value="0.08" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="contact-shadow-thickness" data-i18n="Contact Shadow Thickness" style="width:40%">Thickness</label>
+                        <openmmd-range-number-control id="contact-shadow-thickness" min="0" max="0.1" step="0.001" value="0.01" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="contact-shadow-intensity" data-i18n="Contact Shadow Intensity" style="width:40%">Intensity</label>
+                        <openmmd-range-number-control id="contact-shadow-intensity" min="0" max="2" step="0.01" value="0.55" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="contact-shadow-blur-amount" data-i18n="Contact Shadow Blur Amount" style="width:40%">Blur Amount</label>
+                        <openmmd-range-number-control id="contact-shadow-blur-amount" min="0" max="4" step="0.1" value="1.0" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="contact-shadow-step-count" data-i18n="Contact Shadow Step Count" style="width:40%">Step Count</label>
+                        <openmmd-range-number-control id="contact-shadow-step-count" min="1" max="32" step="1" value="8" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                </div>
+                <div class="control-group" id="environment-texture-settings">
+                    <label id="label-environment-texture" data-i18n="Environment Texture">Environment Texture</label>
+                    <div class="morph-item">
+                        <label for="environment-hdr-file" data-i18n="HDR Image" style="width:50%">HDR Image</label>
+                        <input type="file" id="environment-hdr-file" accept=".hdr" multiple style="width:50%;">
+                    </div>
+                    <div class="morph-item">
+                        <label data-i18n="Current HDR" style="width:50%">Current HDR</label>
+                        <span id="environment-hdr-name" style="width:50%; text-align:right; word-break:break-all;">sundowner_deck_1k.hdr</span>
+                    </div>
+                    <div id="environment-hdr-candidate-area" class="environment-hdr-candidate-area" hidden>
+                        <div class="environment-hdr-candidate-header">
+                            <span id="environment-hdr-candidate-header" data-i18n="Detected HDR files">Detected HDR files</span>
+                            <span id="environment-hdr-candidate-count" class="environment-hdr-candidate-count"></span>
+                        </div>
+                        <div id="environment-hdr-candidate-list" class="environment-hdr-candidate-list"></div>
+                    </div>
+                    <div class="morph-item">
+                        <label for="environment-hdr-intensity" data-i18n="Brightness" style="width:40%">Brightness</label>
+                        <openmmd-range-number-control id="environment-hdr-intensity" min="0" max="10" step="0.01" value="1.0" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label id="label-aa" data-i18n="Anti-Aliasing">Anti-Aliasing</label>
+                    <select id="aa-method" style="width: 100%;">
+                        <option value="fxaa">FXAA</option>
+                        <option value="msaa4" selected>MSAA 4x</option>
+                        <option value="msaa4-fxaa">MSAA 4x + FXAA</option>
+                        <option value="none">None</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label id="label-fps" data-i18n="Rendering FPS">Rendering FPS</label>
+                    <select id="fps-selector" style="width: 100%;">
+                        <option value="0">Unlimited</option>
+                        <option value="24">24 FPS</option>
+                        <option value="30">30 FPS</option>
+                        <option value="60" selected>60 FPS</option>
+                        <option value="120">120 FPS</option>
+                        <option value="144">144 FPS</option>
+                    </select>
+                </div>
+                <div class="control-group" id="color-management-settings">
+                    <label id="label-color-management" data-i18n="Color Management">Color Management</label>
+                    <div class="morph-item">
+                        <label for="view-transform-selector" data-i18n="View Transform" style="width:50%">View Transform</label>
+                        <select id="view-transform-selector" style="width:50%; text-align:right;">
+                            <option value="standard" selected data-i18n="Standard">Standard</option>
+                            <option value="aces-2.0">ACES 2.0</option>
+                        </select>
+                    </div>
+                    <div class="morph-item">
+                        <label for="display-color-space-selector" data-i18n="Display Gamut" style="width:50%">Display</label>
+                        <select id="display-color-space-selector" style="width:50%; text-align:right;">
+                            <option value="srgb" selected>sRGB</option>
+                            <option value="display-p3">Display P3</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label id="label-aspect-ratio" data-i18n="Aspect Ratio">Aspect Ratio</label>
+                    <select id="aspect-ratio-selector" style="width: 100%;">
+                        <option value="16:9" selected>16:9</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label id="label-resolution" data-i18n="Internal Resolution">Resolution</label>
+                    <select id="resolution-selector" style="width: 100%;">
+                        <option value="auto" data-i18n="Auto" selected>Auto</option>
+                        <option value="1280x720">1280x720</option>
+                    </select>
+                </div>
+                <div class="control-group" id="outline-thickness-settings">
+                    <label id="label-outline-thickness" data-i18n="Outline">Outline</label>
+                    <div class="morph-item render-setting-row">
+                        <label for="edge-opacity" data-i18n="edge opacity">Edge Opacity</label>
+                        <openmmd-range-control id="edge-opacity" min="0" max="1" step="0.01" value="0.5"></openmmd-range-control>
+                    </div>
+                </div>
+            </div>
+            <div id="tab-post-effect" class="tab-content">
+                <div class="control-group" id="gamma-settings">
+                    <label id="label-gamma" data-i18n="Gamma">Gamma</label>
+                    <div class="morph-item">
+                        <label for="gamma" data-i18n="Gamma" style="width:40%">Gamma</label>
+                        <openmmd-range-number-control id="gamma" min="0.1" max="4" step="0.01" value="1.0" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item color-temperature-item">
+                        <label for="color-temperature" data-i18n="Color Temperature">Color Temperature</label>
+                        <div class="color-temperature-control">
+                            <openmmd-range-number-control id="color-temperature" min="1000" max="40000" step="100" value="6500" class="control-inline-pair"></openmmd-range-number-control>
+                            <img id="color-temperature-pick" class="morph-key-icon color-temperature-pick-icon" src="fonts/colorize_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="Pick viewport color" title="Pick viewport color" aria-label="Pick viewport color" aria-pressed="false" role="button" tabindex="0">
+                        </div>
+                    </div>
+                </div>
+                <div class="control-group" id="bloom-settings">
+                    <label id="label-post-effects" data-i18n="Bloom">Bloom</label>
+                    <div class="morph-item">
+                        <label for="bloom-enabled" data-i18n="Enabled" style="width:40%">Enabled</label>
+                        <input type="checkbox" id="bloom-enabled">
+                    </div>
+                    <div class="morph-item">
+                        <label for="bloom-threshold" data-i18n="Bloom Threshold" style="width:40%">Threshold</label>
+                        <openmmd-range-number-control id="bloom-threshold" min="0" max="10" step="0.01" value="0.98" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="bloom-blur-amount" data-i18n="Bloom Blur Amount" style="width:40%">Blur Amount</label>
+                        <openmmd-range-number-control id="bloom-blur-amount" min="0" max="8" step="0.1" value="2.0" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="bloom-alpha" data-i18n="Alpha" style="width:40%">Alpha</label>
+                        <openmmd-range-number-control id="bloom-alpha" min="0" max="1" step="0.01" value="1.0" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="bloom-shadow-multiplier" data-i18n="Bloom Shadow Multiplier" style="width:40%">Shadow Multiplier</label>
+                        <openmmd-range-number-control id="bloom-shadow-multiplier" min="0" max="1" step="0.01" value="0.0" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="chromatic-aberration" data-i18n="Chromatic Aberration" style="width:40%">Chromatic Aberration</label>
+                        <openmmd-range-number-control id="chromatic-aberration" min="0" max="1" step="0.01" value="0.0" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                </div>
+                <div class="control-group" id="film-grain-settings">
+                    <label id="label-film-grain" data-i18n="Film Grain">Film Grain</label>
+                    <div class="morph-item">
+                        <label for="film-grain-amount" data-i18n="Noise Amount" style="width:40%">Noise Amount</label>
+                        <openmmd-range-number-control id="film-grain-amount" min="0" max="1" step="0.01" value="0.0" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label data-i18n="Animation Mode" style="width:40%">Animation Mode</label>
+                        <div style="width:60%; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                            <label style="display:flex; align-items:center; gap:4px;">
+                                <input type="radio" id="film-grain-animation-mode-always" name="film-grain-animation-mode" value="always">
+                                <span data-i18n="Always Animate">Always Animate</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:4px;">
+                                <input type="radio" id="film-grain-animation-mode-timeline" name="film-grain-animation-mode" value="timeline" checked>
+                                <span data-i18n="While Timeline Moves">While Timeline Moves</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="control-group" id="depth-of-field-settings">
+                    <label data-i18n="Depth of Field">Depth of Field</label>
+                    <div class="morph-item">
+                        <label for="dof-enabled" data-i18n="Enabled" style="width:40%">Enabled</label>
+                        <input type="checkbox" id="dof-enabled">
+                    </div>
+                    <div class="morph-item">
+                        <label for="dof-algorithm" data-i18n="Algorithm" style="width:40%">Algorithm</label>
+                        <select id="dof-algorithm" style="width:60%;">
+                            <option value="fast">Fast</option>
+                            <option value="depth-aware-gather">Depth-Aware Gather</option>
+                            <option value="thin-lens-multisample">Thin Lens Multisample</option>
+                        </select>
+                    </div>
+                    <div class="morph-item depth-focus-item">
+                        <span class="depth-focus-axis">x</span>
+                        <openmmd-number-control id="depth-focus-x" class="depth-focus-input" step="0.001" value="0"></openmmd-number-control>
+                        <span class="depth-focus-axis">y</span>
+                        <openmmd-number-control id="depth-focus-y" class="depth-focus-input" step="0.001" value="0"></openmmd-number-control>
+                        <span class="depth-focus-axis">z</span>
+                        <openmmd-number-control id="depth-focus-z" class="depth-focus-input" step="0.001" value="0"></openmmd-number-control>
+                        <img id="depth-focus-pick" class="morph-key-icon" src="fonts/colorize_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="Pick focus point">
+                    </div>
+                    <div class="morph-item">
+                        <label for="dof-f-stop" style="width:40%">F-stop</label>
+                        <openmmd-range-number-control id="dof-f-stop" min="0.1" max="32" step="0.1" value="2.8" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                </div>
+                <div class="control-group" id="sss-settings">
+                    <label id="label-sss" data-i18n="Screen Space SSS">Screen Space SSS</label>
+                    <div class="morph-item">
+                        <label for="sss-enabled" data-i18n="Enabled" style="width:40%">Enabled</label>
+                        <input type="checkbox" id="sss-enabled">
+                    </div>
+                    <div class="morph-item">
+                        <label for="sss-radius" data-i18n="Radius" style="width:40%">Radius</label>
+                        <openmmd-range-number-control id="sss-radius" min="0" max="8" step="0.1" value="1.5" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="sss-depth-threshold" data-i18n="Depth Threshold" style="width:40%">Depth Threshold</label>
+                        <openmmd-range-number-control id="sss-depth-threshold" min="0" max="0.1" step="0.001" value="0.01" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="sss-normal-threshold" data-i18n="Normal Threshold" style="width:40%">Normal Threshold</label>
+                        <openmmd-range-number-control id="sss-normal-threshold" min="0" max="1" step="0.01" value="0.2" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                    <div class="morph-item">
+                        <label for="sss-strength" data-i18n="Strength" style="width:40%">Strength</label>
+                        <openmmd-range-number-control id="sss-strength" min="0" max="1" step="0.01" value="0.2" class="control-inline-pair"></openmmd-range-number-control>
+                    </div>
+                </div>
+            </div>
+            <div id="tab-material" class="tab-content">
+                <div class="control-group">
+                    <label id="label-materials" data-i18n="Material">Material</label>
+                    <div class="material-toolbar">
+                        <openmmd-button id="material-select-all" data-i18n="Select All">全て選択</openmmd-button>
+                        <openmmd-button id="material-clear-all" data-i18n="Clear All">全て選択解除</openmmd-button>
+                    </div>
+                    <div class="material-shader-row">
+                        <label id="label-material-shader" for="material-shader-select" data-i18n="Shader">Shader</label>
+                        <div class="material-shader-controls">
+                            <select id="material-shader-select" aria-label="Shader selection"></select>
+                            <openmmd-button id="material-shader-reload" class="material-shader-reload" variant="icon" title="Reload Shader">
+                                <img src="fonts/refresh_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="Reload shader">
+                            </openmmd-button>
+                        </div>
+                    </div>
+                    <select id="material-list" class="material-list" multiple size="8" aria-label="Material selection list"></select>
+                    <div id="material-empty-state" class="material-selection-summary" hidden></div>
+                    <div class="material-controls" style="margin-top: 10px;">
+                        <div class="material-control">
+                            <input type="checkbox" id="material-visible">
+                            <label for="material-visible" data-i18n="Visible">表示非表示</label>
+                        </div>
+                        <div class="material-control">
+                            <input type="checkbox" id="material-ssss">
+                            <label for="material-ssss" data-i18n="SSSSS">SSSSS</label>
+                        </div>
+                        <div class="material-control">
+                            <input type="checkbox" id="material-receive-shadow">
+                            <label for="material-receive-shadow" data-i18n="Receive Shadow">Receive Shadow</label>
+                        </div>
+                        <div class="material-control">
+                            <input type="checkbox" id="material-cast-shadow">
+                            <label for="material-cast-shadow" data-i18n="Cast Shadow">Cast Shadow</label>
+                        </div>
+                        <div class="material-control">
+                            <input type="checkbox" id="material-no-cull">
+                            <label for="material-no-cull" data-i18n="No-cull">No-cull</label>
+                        </div>
+                        <div class="material-control">
+                            <input type="checkbox" id="material-has-edge">
+                            <label for="material-has-edge" data-i18n="Has edge">Has edge</label>
+                        </div>
+                    </div>
+                    <div class="material-pbr-controls">
+                        <div class="material-pbr-row material-pbr-row--compact">
+                            <label data-i18n="Diffuse">Diffuse</label>
+                            <button id="material-diffuse-swatch" type="button" class="color-picker-trigger material-pbr-swatch" aria-label="Diffuse"></button>
+                        </div>
+                        <div class="material-pbr-row material-pbr-row--compact material-pbr-row--range-number">
+                            <label for="material-metallic-range" data-i18n="Metallic">Metallic</label>
+                            <openmmd-range-number-control id="material-metallic-range" min="0" max="1" step="0.001"></openmmd-range-number-control>
+                        </div>
+                        <div class="material-pbr-row material-pbr-row--compact material-pbr-row--range-number">
+                            <label for="material-roughness-range" data-i18n="Roughness">Roughness</label>
+                            <openmmd-range-number-control id="material-roughness-range" min="0" max="1" step="0.001"></openmmd-range-number-control>
+                        </div>
+                        <div class="material-pbr-row material-pbr-color-row material-pbr-color-row--emissive">
+                            <label data-i18n="Emissive">Emissive</label>
+                            <button id="material-emissive-swatch" type="button" class="color-picker-trigger material-pbr-swatch" aria-label="Emissive"></button>
+                            <button id="material-emissive-texture-swatch" type="button" class="color-picker-trigger material-pbr-swatch material-toon-swatch material-emissive-swatch" aria-label="Emissive Texture"></button>
+                            <select id="material-emissive-source" class="material-emissive-source-select" aria-label="Emissive Source">
+                                <option value="color" data-i18n="Color">Color</option>
+                                <option value="texture" data-i18n="Texture">Texture</option>
+                            </select>
+                        </div>
+                        <div class="material-pbr-row">
+                            <label for="material-emissive-strength" data-i18n="Emissive Strength">Emissive Strength</label>
+                            <openmmd-number-control id="material-emissive-strength" class="material-pbr-number" min="0" step="0.001"></openmmd-number-control>
+                        </div>
+                        <div class="material-pbr-row material-pbr-row--compact">
+                            <label data-i18n="Toon Texture">Toon Texture</label>
+                            <button id="material-toon-swatch" type="button" class="color-picker-trigger material-pbr-swatch material-toon-swatch" aria-label="Toon Texture"></button>
+                        </div>
+                        <div class="material-pbr-row material-pbr-row--compact">
+                            <label data-i18n="Shade Color">Shade Color</label>
+                            <button id="material-shade-swatch" type="button" class="color-picker-trigger material-pbr-swatch" aria-label="Shade Color"></button>
+                        </div>
+                    <div class="model-json-toolbar">
+                        <openmmd-button id="model-json-save" data-i18n="Save Model JSON">Save Model JSON</openmmd-button>
+                        <openmmd-button id="model-json-load" data-i18n="Load Model JSON">Load Model JSON</openmmd-button>
+                    </div>
+                    <input type="file" id="model-json-file-input" accept=".json" style="display: none;">
+                </div>
+            </div>
+            </div>
+            <div id="tab-texture" class="tab-content">
+                <div class="control-group">
+                    <label id="label-textures" data-i18n="Texture">Texture</label>
+                    <div id="texture-empty-state" class="material-selection-summary" hidden></div>
+                    <div id="texture-grid" class="texture-grid" aria-label="Texture selection grid"></div>
+                    <div class="texture-conversion-row">
+                        <label for="texture-conversion-select" data-i18n="Texture Conversion">Texture Conversion</label>
+                        <select id="texture-conversion-select" aria-label="Texture conversion">
+                            <option value="gamma-2.2" data-i18n="Gamma 2.2">ガンマ 2.2</option>
+                            <option value="none" data-i18n="Do Not Convert">変換しない</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div id="tab-animation-mapping" class="tab-content">
+                <div class="control-group">
+                    <label id="label-animation-mapping" data-i18n="Animation Mapping">Animation Mapping</label>
+                    <div id="animation-mapping-status" class="animation-mapping-status">No active model.</div>
+                    <div id="animation-mapping-grid" class="animation-mapping-grid" aria-label="Animation bone mapping grid"></div>
+                </div>
+            </div>
+            <div id="tab-debug" class="tab-content">
+                <div class="control-group">
+                    <label id="label-debug" data-i18n="Debug">Debug</label>
+                    <div>
+                        <input type="checkbox" id="show-cascade-shadow-maps">
+                        <label for="show-cascade-shadow-maps" id="label-show-cascade-shadow-maps" data-i18n="Show Cascade Shadow Maps" style="display:inline; font-weight:normal;">Show Cascade Shadow Maps</label>
+                    </div>
+                    <div>
+                        <input type="checkbox" id="show-animation-debug">
+                        <label for="show-animation-debug" id="label-show-animation-debug" data-i18n="Show Animation Data" style="display:inline; font-weight:normal;">アニメーションデータを表示する</label>
+                    </div>
+                    <div>
+                        <input type="checkbox" id="show-bloom-shadow-debug">
+                        <label for="show-bloom-shadow-debug" id="label-show-bloom-shadow-debug" data-i18n="Show Bloom Shadow" style="display:inline; font-weight:normal;">Show Bloom Shadow</label>
+                    </div>
+                    <div style="margin-top: 8px;">
+                        <label for="bloom-shadow-debug-mode" id="label-bloom-shadow-debug-mode" data-i18n="Bloom Shadow Debug Mode" style="display:block; font-weight:normal;">Bloom Shadow Debug Mode</label>
+                        <select id="bloom-shadow-debug-mode">
+                            <option value="0">Resolved Bloom Shadow</option>
+                            <option value="1">dot(normal, lightDir)</option>
+                            <option value="2">Shadow Factor</option>
+                            <option value="3">Contact Shadow</option>
+                            <option value="4">Bloom Shadow Factor</option>
+                            <option value="5">Scene Input</option>
+                            <option value="6">Bloom Extract</option>
+                            <option value="7">Bloom Upsample</option>
+                            <option value="8">Post Effect Output</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label id="label-clicked-mouse-position" data-i18n="Clicked Mouse Position">Clicked Mouse Position</label>
+                    <pre id="clicked-mouse-position-output" style="margin: 0; padding: 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 0.85em; line-height: 1.45; overflow: auto; min-height: 44px;">No click recorded.</pre>
+                </div>
+                <div class="control-group">
+                    <label id="label-camera-debug" data-i18n="Camera Debug">Camera Debug</label>
+                    <pre id="camera-debug-output" style="margin: 0; padding: 8px; background: #f5f5f5; border: 1px solid #ddd; border-radius: 4px; white-space: pre-wrap; font-size: 0.85em; line-height: 1.45; overflow: auto; min-height: 120px;">Camera debug data is not available.</pre>
+                </div>
+                <div class="control-group">
+                    <label id="label-bone-debug" data-i18n="Bone Info">ボーン情報</label>
+                    <div style="overflow: auto; border: 1px solid #ddd; border-radius: 4px; background: #f5f5f5;">
+                        <table id="bone-debug-table" style="width: 100%; border-collapse: collapse; font-size: 0.85em; line-height: 1.45;">
+                            <thead>
+                                <tr>
+                                    <th scope="col" style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">ボーン名</th>
+                                    <th scope="col" style="text-align: right; padding: 8px; border-bottom: 1px solid #ddd;">baseRotationQuaternion X</th>
+                                    <th scope="col" style="text-align: right; padding: 8px; border-bottom: 1px solid #ddd;">baseRotationQuaternion Y</th>
+                                    <th scope="col" style="text-align: right; padding: 8px; border-bottom: 1px solid #ddd;">baseRotationQuaternion Z</th>
+                                    <th scope="col" style="text-align: right; padding: 8px; border-bottom: 1px solid #ddd;">baseRotationQuaternion W</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bone-debug-output">
+                                <tr>
+                                    <td colspan="5" style="padding: 8px;">Bone debug data is not available.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <label id="label-animation-debug" data-i18n="Animation Data">アニメーションデータ</label>
+                    <div style="overflow: auto; border: 1px solid #ddd; border-radius: 4px; background: #f5f5f5;">
+                        <table id="animation-debug-table" style="width: 100%; border-collapse: collapse; font-size: 0.85em; line-height: 1.45;">
+                            <thead>
+                                <tr>
+                                    <th scope="col" style="text-align: left; padding: 8px; border-bottom: 1px solid #ddd;">ボーン名</th>
+                                    <th scope="col" style="text-align: right; padding: 8px; border-bottom: 1px solid #ddd;">X (deg)</th>
+                                    <th scope="col" style="text-align: right; padding: 8px; border-bottom: 1px solid #ddd;">Y (deg)</th>
+                                    <th scope="col" style="text-align: right; padding: 8px; border-bottom: 1px solid #ddd;">Z (deg)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="animation-debug-output">
+                                <tr>
+                                    <td colspan="4" style="padding: 8px;">Animation debug data is not available.</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- 操作方法
+        <div style="font-size: 0.8em; color: #666; margin-top: 20px;">
+            Right-click drag: Rotate<br>
+            Middle-click drag: Pan<br>
+            Wheel: Zoom
+        </div>
+        -->
+    </div>
+    <script src="./source/lib/jszip.min.js"></script>
+    <script src="./source/lib/encoding.min.js"></script>
+    <script src="./source/lib/ammo.js"></script>
+    <script type="module" src="./source/ui/ui-components.js"></script>
+    <script type="module">
+        import { bootstrapBrowserOpenMmdApp } from './source/bootstrap/browser-openmmd-app.js';
+        await bootstrapBrowserOpenMmdApp();
+    </script>
+    <div id="global-drop-zone" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(255,255,255,0.7); z-index: 1000; color: #333; justify-content: center; align-items: center; pointer-events: none; font-size: 1.5em; font-weight: bold; text-align: center;">
+        <div style="border: 2px dashed #ccc; padding: 40px; background: rgba(255, 255, 255, 0.9); box-shadow: 0 0 20px rgba(0,0,0,0.1);">
+            <span data-i18n="Either drop a model, VMD, HDR, WGSL, UI JSON, or model JSON file here.">Either drop a model, VMD, HDR, WGSL, UI JSON, or model JSON file here.</span>
+        </div>
+    </div>
+    <div id="delete-confirm-overlay" class="delete-confirm-overlay" hidden>
+        <div id="delete-confirm-dialog" class="delete-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="delete-confirm-title">
+            <div id="delete-confirm-title" class="delete-confirm-title">Delete</div>
+            <p id="delete-confirm-message" class="delete-confirm-message"></p>
+            <ul id="delete-confirm-list" class="delete-confirm-list" hidden></ul>
+            <div class="delete-confirm-actions">
+                <button id="delete-confirm-cancel" type="button" style="padding: 8px 14px; cursor: pointer;">Cancel</button>
+                <button id="delete-confirm-confirm" type="button" style="padding: 8px 14px; cursor: pointer;">Delete</button>
+            </div>
+        </div>
+    </div>
+    <div id="animation-export-overlay" class="animation-export-overlay" hidden>
+        <div id="animation-export-dialog" class="animation-export-dialog" role="dialog" aria-modal="true" aria-labelledby="animation-export-title" tabindex="-1">
+            <div id="animation-export-title" class="animation-export-title" data-i18n="Animation Export">Animation Export</div>
+            <fieldset id="animation-export-format-group" class="animation-export-fieldset">
+                <legend id="animation-export-format-legend" data-i18n="Export Format">Export Format</legend>
+                <div class="animation-export-radio-group">
+                    <label class="animation-export-radio" for="animation-export-format-vmd">
+                        <input type="radio" id="animation-export-format-vmd" name="animation-export-format" value="vmd" checked>
+                        <span data-i18n="VMD">VMD</span>
+                    </label>
+                    <label class="animation-export-radio" for="animation-export-format-vrma">
+                        <input type="radio" id="animation-export-format-vrma" name="animation-export-format" value="vrma">
+                        <span data-i18n="VRMA">VRMA</span>
+                    </label>
+                </div>
+            </fieldset>
+            <div id="animation-export-vrma-options" class="animation-export-vrma-options" aria-hidden="true" hidden>
+                <fieldset id="animation-export-vrma-ik-group" class="animation-export-fieldset">
+                    <legend id="animation-export-vrma-ik-legend" data-i18n="IK Bake">IK Bake</legend>
+                    <div class="animation-export-radio-group">
+                        <label class="animation-export-radio" for="animation-export-vrma-ik-to-rotation">
+                            <input type="radio" id="animation-export-vrma-ik-to-rotation" name="animation-export-vrma-ik" value="to-rotation" checked>
+                            <span data-i18n="Convert IK to Rotation (VRMA Compatible)">IK を回転に変換する (VRMA Compatible)</span>
+                        </label>
+                        <label class="animation-export-radio" for="animation-export-vrma-ik-as-is">
+                            <input type="radio" id="animation-export-vrma-ik-as-is" name="animation-export-vrma-ik" value="as-is">
+                            <span data-i18n="Export IK Bones as-is (OpenMMD Only)">IK ボーンのままエクスポートする (OpenMMD Only)</span>
+                        </label>
+                    </div>
+                </fieldset>
+                <fieldset id="animation-export-vrma-lower-body-group" class="animation-export-fieldset">
+                    <legend id="animation-export-vrma-lower-body-legend" data-i18n="Lower Body Bake">Lower Body Bake</legend>
+                    <div class="animation-export-radio-group">
+                        <label class="animation-export-radio" for="animation-export-vrma-lower-body-bake">
+                            <input type="radio" id="animation-export-vrma-lower-body-bake" name="animation-export-vrma-lower-body" value="bake" checked>
+                            <span data-i18n="Bake Lower Body Bones (VRMA Compatible)">下半身ボーンをベイクする (VRMA Compatible)</span>
+                        </label>
+                        <label class="animation-export-radio" for="animation-export-vrma-lower-body-skip">
+                            <input type="radio" id="animation-export-vrma-lower-body-skip" name="animation-export-vrma-lower-body" value="skip">
+                            <span data-i18n="Do Not Bake Lower Body Bones (OpenMMD Only)">下半身ボーンをベイクしない (OpenMMD Only)</span>
+                        </label>
+                    </div>
+                </fieldset>
+            </div>
+            <div class="animation-export-actions">
+                <button id="animation-export-save" type="button" data-i18n="Save" style="padding: 8px 14px; cursor: pointer;">保存</button>
+            </div>
+        </div>
+    </div>
+    <div id="color-picker-overlay" class="color-picker-overlay" hidden>
+        <div id="color-picker-dialog" class="color-picker-dialog" role="dialog" aria-modal="true" tabindex="-1">
+            <div class="color-picker-header">
+                <div id="color-picker-preview" class="color-picker-preview" aria-hidden="true"></div>
+                <div>
+                    <div class="color-picker-title" data-i18n="Color">Color</div>
+                    <div style="font-size: 0.82em; color: rgba(255,255,255,0.7);">Linear / Perceptual</div>
+                </div>
+            </div>
+            <div class="color-picker-mode-row">
+                <button id="color-picker-linear" type="button" class="is-active" data-i18n="Linear">Linear</button>
+                <button id="color-picker-perceptual" type="button" data-i18n="Perceptual">Perceptual</button>
+                <button id="color-picker-rgb" type="button" class="is-active" data-i18n="RGB">RGB</button>
+                <button id="color-picker-hsv" type="button" data-i18n="HSV">HSV</button>
+                <button id="color-picker-temperature" type="button" data-i18n="Temperature">Temperature</button>
+            </div>
+            <div id="color-picker-body" class="color-picker-body">
+                <canvas id="color-picker-wheel" class="color-picker-wheel" width="220" height="220"></canvas>
+                <input id="color-picker-value-slider" class="color-picker-value-slider" type="range" min="0" max="1" step="0.001" value="1">
+                <div class="color-picker-fields">
+                    <div class="color-picker-channel-group">
+                        <label data-i18n="RGB">RGB</label>
+                        <input id="color-picker-rgb-red" type="number" min="0" max="255" step="1" value="255" aria-label="Red">
+                        <input id="color-picker-rgb-green" type="number" min="0" max="255" step="1" value="255" aria-label="Green">
+                        <input id="color-picker-rgb-blue" type="number" min="0" max="255" step="1" value="255" aria-label="Blue">
+                    </div>
+                    <div class="color-picker-channel-group">
+                        <label data-i18n="HSV">HSV</label>
+                        <input id="color-picker-hue" type="number" min="0" max="360" step="1" value="0" aria-label="Hue">
+                        <input id="color-picker-saturation" type="number" min="0" max="100" step="1" value="0" aria-label="Saturation">
+                        <input id="color-picker-value" type="number" min="0" max="100" step="1" value="100" aria-label="Value">
+                    </div>
+                    <div id="color-picker-temperature-row" class="color-picker-temperature-row">
+                        <label for="color-picker-temperature-range" data-i18n="Color Temperature">Color Temperature</label>
+                        <input id="color-picker-temperature-range" type="range" dir="ltr" min="1000" max="40000" step="100" value="6500" aria-label="Color Temperature">
+                        <input id="color-picker-temperature-value" type="number" dir="ltr" min="1000" max="40000" step="100" value="6500" aria-label="Color Temperature">
+                    </div>
+                    <div class="color-picker-channel-group">
+                        <label data-i18n="Alpha">Alpha</label>
+                        <input id="color-picker-alpha" type="number" min="0" max="1" step="0.001" value="1.000" aria-label="Alpha">
+                    </div>
+                    <div class="color-picker-hex-row">
+                        <label data-i18n="Hex">Hex</label>
+                        <input id="color-picker-hex" class="color-picker-value-input" type="text" value="#FFFFFFFF" aria-label="Hex color">
+                        <button id="color-picker-eyedropper" class="color-picker-eyedropper" type="button" title="Pick screen color" aria-label="Pick screen color">
+                            <img src="fonts/colorize_24dp_1F1F1F_FILL0_wght400_GRAD0_opsz24.svg" alt="">
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="toon-texture-picker-overlay" class="toon-picker-overlay" hidden>
+        <div id="toon-texture-picker-dialog" class="toon-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="toon-texture-picker-title" tabindex="0">
+            <div class="toon-picker-header">
+                <div id="toon-texture-picker-title" class="toon-picker-title">Toon Texture</div>
+                <button id="toon-texture-picker-close" type="button" class="toon-picker-close" data-i18n="Close">Close</button>
+            </div>
+            <div id="toon-texture-picker-empty-state" class="toon-picker-empty-state" hidden></div>
+            <div id="toon-texture-picker-grid" class="texture-grid toon-picker-grid" aria-label="Toon texture selection grid"></div>
+        </div>
+    </div>
+    <div id="video-export-overlay" hidden style="position: fixed; inset: 0; z-index: 2000; background: rgba(8, 10, 16, 0.72); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box;">
+        <div style="width: min(560px, 100%); background: rgba(255, 255, 255, 0.96); border-radius: 16px; padding: 24px; box-shadow: 0 12px 40px rgba(0,0,0,0.28); display: flex; flex-direction: column; gap: 16px;">
+            <div style="font-size: 1.05em; font-weight: bold;" id="video-export-status" data-i18n="Exporting...">Exporting...</div>
+            <progress id="video-export-progress" max="100" value="0" style="width: 100%; height: 18px;"></progress>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+                <div id="video-export-progress-label" style="font-size: 0.95em; color: #444;">0%</div>
+                <button id="video-export-cancel" data-i18n="Cancel" style="padding: 8px 14px; cursor: pointer;">Cancel</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
