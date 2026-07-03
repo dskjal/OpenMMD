@@ -1,0 +1,85 @@
+:root {
+  --openmmd-button-radius: 4px;
+  --openmmd-button-border-color: #ccc;
+  --openmmd-button-background: #fff;
+  --openmmd-icon-button-size: 30px;
+  --openmmd-button-icon-size: 18px;
+}
+
+openmmd-button {
+  display: inline-flex;
+  min-width: 0;
+}
+
+openmmd-button[data-full-width="true"] {
+  display: block;
+  width: 100%;
+}
+
+openmmd-button[variant="toolbar"] {
+  flex: 1 1 0;
+}
+
+openmmd-button[variant="icon"] {
+  --openmmd-button-padding: 0;
+}
+
+openmmd-button[variant="text-small"] {
+  --openmmd-button-padding: 2px 6px;
+}
+
+openmmd-number-control {
+  display: inline-flex;
+  min-width: 0;
+}
+
+openmmd-range-number-control {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.control-inline-number {
+  width: 60%;
+}
+
+.control-inline-pair {
+  width: 60%;
+}
+
+.control-inline-pair--wide {
+  width: 100%;
+}
+
+.control-inline-pair--compact {
+  --openmmd-range-number-value-width: 72px;
+}
+
+.control-inline-number--narrow {
+  --openmmd-number-width: 72px;
+}
+
+.control-inline-number--table {
+  width: 100%;
+  --openmmd-number-width: 100%;
+}
+
+.camera-input-row openmmd-range-number-control {
+  flex: 1 1 auto;
+}
+
+.camera-pose-table openmmd-number-control,
+.light-table openmmd-number-control,
+.bone-table openmmd-number-control {
+  width: 100%;
+  --openmmd-number-width: 100%;
+}
+
+.depth-focus-item openmmd-number-control {
+  width: 18%;
+  min-width: 72px;
+  --openmmd-number-width: 100%;
+}
+
+.material-pbr-row openmmd-range-number-control {
+  flex: 1 1 auto;
+}
