@@ -1,0 +1,32 @@
+[
+  {
+    "name": "mmd-shader.wgsl",
+    "label": "MMD Shader",
+    "entryPath": "source/infrastructure/gpu/shaders/custom-shaders/mmd-shader.wgsl",
+    "defaultFor": [
+      "default",
+      "mmd",
+      "pmd",
+      "pmx"
+    ],
+    "order": 0
+  },
+  {
+    "name": "gltf-shader.wgsl",
+    "label": "glTF Shader",
+    "entryPath": "source/infrastructure/gpu/shaders/custom-shaders/gltf-shader.wgsl",
+    "defaultFor": [
+      "gltf"
+    ],
+    "order": 1
+  },
+  {
+    "name": "mtoon-shader.wgsl",
+    "label": "MToon Shader",
+    "entryPath": "source/infrastructure/gpu/shaders/custom-shaders/mtoon-shader.wgsl",
+    "defaultFor": [
+      "vrm"
+    ],
+    "order": 2
+  }
+]
