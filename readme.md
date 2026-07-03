@@ -57,7 +57,8 @@ API のリストは `docs/specification/api-specification-ja.md` を参照。
 
 # 使い方
 ## pmx-inspector.html の使い方
-URL は `http://localhost:3000/pmx-inspector`。
+- URL は [https://dskjal.github.io/OpenMMD/pmx-inspector.html](https://dskjal.github.io/OpenMMD/pmx-inspector.html)
+- ローカルの場合は `http://localhost:3000/pmx-inspector`。
 
 pmd, pmx, vmd をドラッグする。
 
