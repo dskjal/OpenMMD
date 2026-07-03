@@ -23,7 +23,7 @@
 ### コマンド
 
 1. ソースのダウンロード
-> git clone https://github.com/dskjal/OpenMMD
+> git clone https://github.com/dskjal/OpenMMD  
 > cd openmmd
 
 2. 依存関係のインストール
