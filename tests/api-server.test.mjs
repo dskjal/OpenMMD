@@ -106,6 +106,23 @@ test('POST /api/command returns 503 when the viewer is not connected', { timeout
   }
 });
 
+test('static JavaScript assets are served with a JavaScript MIME type', { timeout: 5000 }, async () => {
+  const { app } = createApiApp();
+  const { server, baseUrl } = await startServer(app);
+
+  try {
+    const response = await fetch(`${baseUrl}/source/ui/ui-components.js`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') || '', /javascript/i);
+
+    const moduleResponse = await fetch(`${baseUrl}/source/bootstrap/browser-openmmd-app.js`);
+    assert.equal(moduleResponse.status, 200);
+    assert.match(moduleResponse.headers.get('content-type') || '', /javascript/i);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test('HTTP GET APIs return cached model and bone data', { timeout: 5000 }, async () => {
   const { app } = createApiApp();
   const { server, baseUrl } = await startServer(app);

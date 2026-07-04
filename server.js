@@ -7,6 +7,7 @@ const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number.parseInt(process.env.PORT || '3000', 10);
 const MESSAGE_NAMESPACE = 'openmmd-api';
 const COMMAND_RESULT_TIMEOUT_MS = 30000;
+const JAVASCRIPT_CONTENT_TYPE = 'application/javascript; charset=utf-8';
 
 /**
  * Creates the default runtime snapshot.
@@ -318,6 +319,20 @@ export function createApiApp() {
   app.disable('x-powered-by');
   app.use(express.json({ limit: '256mb' }));
   app.use(express.urlencoded({ extended: false, limit: '256mb' }));
+  app.use((req, res, next) => {
+    const extension = path.extname(req.path).toLowerCase();
+    if (extension === '.js' || extension === '.mjs') {
+      const originalSetHeader = res.setHeader.bind(res);
+      res.setHeader = (name, value) => {
+        if (String(name).toLowerCase() === 'content-type' && value === 'application/octet-stream') {
+          return originalSetHeader(name, JAVASCRIPT_CONTENT_TYPE);
+        }
+        return originalSetHeader(name, value);
+      };
+    }
+
+    next();
+  });
   app.use(express.static(rootDir, { extensions: ['html'] }));
 
   app.get('/', (req, res) => {
