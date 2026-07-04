@@ -1,8 +1,9 @@
-const express = require('express');
-const path = require('path');
-const { randomUUID } = require('crypto');
+import express from 'express';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const rootDir = __dirname;
+const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number.parseInt(process.env.PORT || '3000', 10);
 const MESSAGE_NAMESPACE = 'openmmd-api';
 const COMMAND_RESULT_TIMEOUT_MS = 30000;
@@ -90,7 +91,7 @@ function createApiError(status, message) {
  * Creates a configured Express app and runtime snapshot store.
  * @returns {{app: import('express').Express, setRuntimeStateSnapshot: function, getRuntimeStateSnapshot: function}} App bundle.
  */
-function createApiApp() {
+export function createApiApp() {
   const app = express();
   const pendingCommandResolvers = new Map();
   let runtimeStateSnapshot = createEmptyRuntimeSnapshot();
@@ -478,13 +479,13 @@ function createApiApp() {
   };
 }
 
-if (require.main === module) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const { app } = createApiApp();
   app.listen(PORT, () => {
     console.log(`OpenMMD local API server listening on http://localhost:${PORT}`);
   });
 }
 
-module.exports = {
+export default {
   createApiApp,
 };

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import JSZipModule from '../source/lib/jszip.min.js';
+import JSZipModule from '../source/lib/jszip.js';
 import { createDroppedInputService } from '../source/application/assets/dropped-input-service.js';
 
 /**

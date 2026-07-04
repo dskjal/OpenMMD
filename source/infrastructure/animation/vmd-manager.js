@@ -7,7 +7,7 @@ import {
   loadAnimationSourcesFromZip,
   splitVmdDocumentIntoAnimationSources,
 } from '../../application/animation/runtime-animation.js';
-import * as JSZipModule from '../../lib/jszip.min.js';
+import * as JSZipModule from '../../lib/jszip.js';
 
 /**
  * animation source を管理します。

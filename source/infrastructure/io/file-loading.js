@@ -1,4 +1,4 @@
-import * as JSZipModule from '../../lib/jszip.min.js';
+import * as JSZipModule from '../../lib/jszip.js';
 import { collectModelShaderSelectValues } from '../serialization/model-json.js';
 
 const AUDIO_MIME_TYPE_BY_EXTENSION = new Map([
@@ -117,7 +117,7 @@ export function isShaderFileName(fileName) {
 /**
  * ZIP ファイルを読み込みます。
  * @param {Blob|File|ArrayBuffer|Uint8Array|string} input - 読み込み対象。
- * @returns {Promise<import('./lib/jszip.min.js').default>} ZIP オブジェクト。
+ * @returns {Promise<import('../../lib/jszip.js').default>} ZIP オブジェクト。
  */
 export async function loadZipArchive(input) {
   const JSZip = globalThis.JSZip || JSZipModule.default || JSZipModule;

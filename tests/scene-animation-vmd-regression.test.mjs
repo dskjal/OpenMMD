@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import test from 'node:test';
 
-import * as JSZipModule from '../source/lib/jszip.min.js';
+import * as JSZipModule from '../source/lib/jszip.js';
 import { createTracksFromMixedSources, upsertCameraKeyframe, upsertLightKeyframe } from '../source/core/animation/timeline-data.js';
 import { VMDManager } from '../source/infrastructure/animation/vmd-manager.js';
 import { createVmdAnimationSource } from '../source/application/animation/runtime-animation.js';

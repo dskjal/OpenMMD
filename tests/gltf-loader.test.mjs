@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
-import JSZipModule from '../source/lib/jszip.min.js';
+import JSZipModule from '../source/lib/jszip.js';
 import { Color, Mesh, PlaneGeometry } from 'three';
 import { AnimationController } from '../source/core/animation/animation.js';
 import { GLTFModelLoader } from '../source/infrastructure/loaders/gltf-loader.js';
