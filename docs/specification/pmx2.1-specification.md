@@ -1,7 +1,9 @@
 # PMX (Polygon Model eXtended) 2.1
 
-[URL](https://gist.githubusercontent.com/felixjones/f8a06bd48f9da9a4539f/raw/57b4491bd54540a2ecebbee81d61d6fd8c31b99d/pmx21.md)
-[How MikuMikuDance Animation Works #1: Morphing and Skinning](https://qiita.com/dragonmeteor/items/0211166d55bb2eb7c07c)
+- [URL](https://gist.githubusercontent.com/felixjones/f8a06bd48f9da9a4539f/raw/57b4491bd54540a2ecebbee81d61d6fd8c31b99d/pmx21.md)
+- [How MikuMikuDance Animation Works #1: Morphing and Skinning](https://qiita.com/dragonmeteor/items/0211166d55bb2eb7c07c)
+- `./PMX_spec.txt`
+
 
 This is an English description of the .PMX file format used in Miku Miku Dance (MMD).
 
